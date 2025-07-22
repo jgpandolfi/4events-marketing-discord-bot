@@ -6,11 +6,14 @@ import {
 import dotenv from "dotenv"
 import fetch from "node-fetch"
 
+
 import { createRequire } from "module"
 const require = createRequire(import.meta.url)
 const emojis = require("./emojis.json")
 
+
 dotenv.config()
+
 
 
 // Validação das variáveis de ambiente
@@ -19,9 +22,16 @@ if (!process.env.BOT_TOKEN) {
   process.exit(1)
 }
 
+if (!process.env.CANAL_MARKETING) {
+  console.error("❌ Erro: CANAL_MARKETING não está configurado no arquivo .env")
+  process.exit(1)
+}
+
+
 
 // Configuração da webhook do N8N
 const WEBHOOK_URL = process.env.WEBHOOK
+
 
 // Cria o cliente do Discord com as intents necessárias
 const client = new Client({
@@ -33,6 +43,7 @@ const client = new Client({
 })
 
 
+
 // Função auxiliar para obter string de emoji personalizado do bot (emojis.json)
 function obterEmoji(nomeEmoji) {
   try {
@@ -41,10 +52,12 @@ function obterEmoji(nomeEmoji) {
       return `<:${nomeEmoji}:${emojis.estatico[nomeEmoji]}>`
     }
 
+
     // Verifica se o emoji existe na categoria animado
     if (emojis.animado && emojis.animado[nomeEmoji]) {
       return `<a:${nomeEmoji}:${emojis.animado[nomeEmoji]}>`
     }
+
 
     // Retorna vazio se não encontrar o emoji
     console.error(`❌ O emoji personalizado de nome ${nomeEmoji} não existe`)
@@ -54,6 +67,7 @@ function obterEmoji(nomeEmoji) {
     return ""
   }
 }
+
 
 // Define o comando slash /marketing
 const cmdMarketing = new SlashCommandBuilder()
@@ -82,16 +96,19 @@ const cmdMarketing = new SlashCommandBuilder()
   )
 
 
+
 // Define o comando /ping para teste
 const cmdPing = new SlashCommandBuilder()
   .setName("ping")
   .setDescription("🏓 Testa a conectividade do bot")
 
 
+
 // Define o comando /help
 const cmdHelp = new SlashCommandBuilder()
   .setName("help")
   .setDescription("❓ Mostra informações de ajuda sobre os comandos")
+
 
 
 // Função para validar e formatar data
@@ -167,6 +184,7 @@ function validarEFormatarData(dataInput) {
 }
 
 
+
 // Função para enviar dados para a webhook do N8N
 async function enviarParaN8N(cardTitle, detalhes, prazo, usuario) {
   try {
@@ -185,7 +203,9 @@ async function enviarParaN8N(cardTitle, detalhes, prazo, usuario) {
     }
 
 
+
     console.log("📤 Enviando dados para N8N:", JSON.stringify(body, null, 2))
+
 
 
     const response = await fetch(WEBHOOK_URL, {
@@ -197,9 +217,11 @@ async function enviarParaN8N(cardTitle, detalhes, prazo, usuario) {
     })
 
 
+
     if (!response.ok) {
       throw new Error(`Erro HTTP: ${response.status} - ${response.statusText}`)
     }
+
 
 
     const result = await response.json().catch(() => ({ success: true }))
@@ -208,11 +230,87 @@ async function enviarParaN8N(cardTitle, detalhes, prazo, usuario) {
     return { success: true, data: result }
 
 
+
   } catch (error) {
     console.error("❌ Erro ao enviar para N8N:", error.message)
     return { success: false, error: error.message }
   }
 }
+
+
+
+// Função para enviar alerta no canal de marketing
+async function enviarAlertaCanal(nomeDemanda, detalhesDemanda, validacaoData, usuario, taskUrl = null) {
+  try {
+    const canalMarketing = client.channels.cache.get(process.env.CANAL_MARKETING)
+    
+    if (!canalMarketing) {
+      console.error("❌ Canal de marketing não encontrado!")
+      return
+    }
+
+    // Prepara os campos do embed para o canal
+    const embedFields = [
+      {
+        name: `${obterEmoji("info")} Nome da tarefa`,
+        value: `\`\`\`${truncarTexto(nomeDemanda, 500)}\`\`\``,
+        inline: false,
+      },
+      {
+        name: `${obterEmoji("pasta")} Detalhes`,
+        value: `\`${truncarTexto(detalhesDemanda, 800)}\``,
+        inline: false,
+      },
+      {
+        name: `${obterEmoji("relogio")} Prazo`,
+        value: `\`${validacaoData.dataFormatada}\``,
+        inline: true,
+      },
+      {
+        name: `${obterEmoji("equipe")} Solicitado por`,
+        value: `<@${usuario.id}> (${usuario.tag})`,
+        inline: true,
+      },
+      {
+        name: `${obterEmoji("relogio2")} Criado em`,
+        value: formatarDataHora(),
+        inline: true,
+      }
+    ]
+
+    // Adiciona URL da tarefa se disponível
+    if (taskUrl) {
+      embedFields.push({
+        name: `${obterEmoji("planeta")} Link da tarefa`,
+        value: `[Clique aqui para acessar a tarefa](${taskUrl})`,
+        inline: false,
+      })
+    }
+
+    // Cria o embed de alerta para o canal
+    const embedAlerta = {
+      color: 0xff4f00, // Cor laranja para destacar como alerta
+      description: "**Uma nova solicitação de tarefa foi criada:**",
+      fields: embedFields,
+      footer: {
+        text: "4.events Marketing Bot • Alerta automático",
+      },
+      timestamp: new Date().toISOString(),
+    }
+
+    // Envia a mensagem no canal de marketing com menção da role específica
+    await canalMarketing.send({
+      content: `${obterEmoji("notify")} Nova demanda registrada! <@&422833735780794379>`,
+      embeds: [embedAlerta],
+    })
+
+    console.log(`📢 Alerta enviado no canal de marketing para a tarefa: "${nomeDemanda}"`)
+
+  } catch (error) {
+    console.error("❌ Erro ao enviar alerta no canal de marketing:", error.message)
+  }
+}
+
 
 
 // Função para formatar a data/hora em português
@@ -229,11 +327,13 @@ function formatarDataHora() {
 }
 
 
+
 // Função para truncar texto se muito longo
 function truncarTexto(texto, maxLength = 1000) {
   if (texto.length <= maxLength) return texto
   return texto.substring(0, maxLength - 3) + "..."
 }
+
 
 
 // Evento: Bot está pronto
@@ -258,9 +358,11 @@ client.once("ready", async () => {
 })
 
 
+
 // Evento: Processar interações (comandos slash)
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isCommand()) return
+
 
 
   try {
@@ -280,6 +382,7 @@ client.on("interactionCreate", async (interaction) => {
       }
 
 
+
       if (!detalhesDemanda || detalhesDemanda.trim().length === 0) {
         await interaction.reply({
           content: "❌ Os detalhes da tarefa não podem estar vazios!",
@@ -287,6 +390,7 @@ client.on("interactionCreate", async (interaction) => {
         })
         return
       }
+
 
 
       // Valida a data do prazo
@@ -300,8 +404,10 @@ client.on("interactionCreate", async (interaction) => {
       }
 
 
+
       // Resposta inicial
       await interaction.reply(`${obterEmoji("loading")} Criando solicitação de tarefa para o marketing...`)
+
 
 
       // Prepara dados do usuário
@@ -313,11 +419,13 @@ client.on("interactionCreate", async (interaction) => {
       }
 
 
+
       // Prepara dados do prazo
       const dadosPrazo = {
         dataFormatada: validacaoData.dataFormatada,
         dataISO: validacaoData.iso
       }
+
 
 
       // Envia para o N8N
@@ -329,8 +437,25 @@ client.on("interactionCreate", async (interaction) => {
       )
 
 
+
       if (resultado.success) {
-        // Prepara os campos do embed
+        // Captura a URL da tarefa se disponível
+        let taskUrl = null
+        if (resultado.data) {
+          // Se for um array, pega o primeiro elemento
+          if (Array.isArray(resultado.data) && resultado.data.length > 0) {
+            taskUrl = resultado.data[0].url || 
+                      resultado.data[0].taskUrl || 
+                      resultado.data[0].cardUrl
+          } else if (typeof resultado.data === 'object') {
+            // Se for um objeto simples
+            taskUrl = resultado.data.url || 
+                      resultado.data.taskUrl || 
+                      resultado.data.cardUrl
+          }
+        }
+
+        // Prepara os campos do embed de resposta ao usuário
         const embedFields = [
           {
             name: `${obterEmoji("info")} Nome da tarefa`,
@@ -359,24 +484,7 @@ client.on("interactionCreate", async (interaction) => {
           }
         ]
 
-      
-      // Adiciona URL da tarefa se disponível na resposta do N8N
-      if (resultado.data) {
-        let taskUrl = null
-        
-        // Se for um array, pega o primeiro elemento
-        if (Array.isArray(resultado.data) && resultado.data.length > 0) {
-          taskUrl = resultado.data[0].url || 
-                    resultado.data[0].taskUrl || 
-                    resultado.data[0].cardUrl
-        } else if (typeof resultado.data === 'object') {
-          // Se for um objeto simples
-          taskUrl = resultado.data.url || 
-                    resultado.data.taskUrl || 
-                    resultado.data.cardUrl
-        }
-        
-        // Adiciona o campo se encontrou a URL
+        // Adiciona URL da tarefa no embed de resposta se disponível
         if (taskUrl) {
           embedFields.push({
             name: `${obterEmoji("planeta")} Link da Tarefa`,
@@ -384,10 +492,8 @@ client.on("interactionCreate", async (interaction) => {
             inline: false,
           })
         }
-      }
 
-
-        // Sucesso - edita a resposta
+        // Sucesso - edita a resposta para o usuário
         const embed = {
           color: 0x00ff00,
           title: `${obterEmoji("certo")} Solicitação criada com sucesso!`,
@@ -398,15 +504,15 @@ client.on("interactionCreate", async (interaction) => {
           timestamp: new Date().toISOString(),
         }
 
-
         await interaction.editReply({
           content: "",
           embeds: [embed],
         })
 
+        // NOVA FUNCIONALIDADE: Envia alerta no canal de marketing
+        await enviarAlertaCanal(nomeDemanda, detalhesDemanda, validacaoData, usuario, taskUrl)
 
         console.log(`✅ Solicitação criada por ${usuario.displayName}: "${nomeDemanda}" - Prazo: ${validacaoData.dataFormatada}`)
-
 
       } else {
         // Erro - edita a resposta
@@ -414,10 +520,10 @@ client.on("interactionCreate", async (interaction) => {
           content: `❌ **Erro ao criar solicitação**\n\`\`\`${resultado.error}\`\`\`\nTente novamente ou entre em contato com o suporte.`,
         })
 
-
         console.error(`❌ Falha ao criar solicitação para ${usuario.displayName}: ${resultado.error}`)
       }
     }
+
 
 
     // Comando /ping
@@ -453,6 +559,7 @@ client.on("interactionCreate", async (interaction) => {
         ephemeral: true,
       })
     }
+
 
 
     // Comando /help
@@ -524,7 +631,8 @@ client.on("interactionCreate", async (interaction) => {
                    "• Link direto para a tarefa criada\n" +
                    "• Validação inteligente de dados\n" +
                    "• Confirmação visual com embed\n" +
-                   "• Registro de quem solicitou a tarefa",
+                   "• Registro de quem solicitou a tarefa\n" +
+                   "• Alerta automático no canal de marketing",
             inline: false,
           }
         ],
@@ -535,11 +643,13 @@ client.on("interactionCreate", async (interaction) => {
       }
 
 
+
       await interaction.reply({
         embeds: [embed],
         ephemeral: true,
       })
     }
+
 
 
   } catch (error) {
@@ -559,10 +669,12 @@ client.on("interactionCreate", async (interaction) => {
 })
 
 
+
 // Evento: Log de erros
 client.on("error", (error) => {
   console.error("❌ Erro do cliente Discord:", error.message)
 })
+
 
 
 // Evento: Bot desconectado
@@ -571,22 +683,26 @@ client.on("disconnect", () => {
 })
 
 
+
 // Evento: Bot reconectado
 client.on("reconnecting", () => {
   console.log("🔄 Reconectando ao Discord...")
 })
 
 
+
 // Tratamento de erros não capturados
 process.on("unhandledRejection", (reason, promise) => {
-  console.error("❌ Unhandled Rejection at:", promise, "reason:", reason)
+  console.error("❌ Unhandled Rejection at:", promise, "reason:", promise)
 })
+
 
 
 process.on("uncaughtException", (error) => {
   console.error("❌ Uncaught Exception:", error.message)
   process.exit(1)
 })
+
 
 
 // Graceful shutdown
@@ -597,11 +713,13 @@ process.on("SIGINT", () => {
 })
 
 
+
 process.on("SIGTERM", () => {
   console.log("🛑 Recebido SIGTERM. Encerrando bot...")
   client.destroy()
   process.exit(0)
 })
+
 
 
 // Conecta o bot ao Discord
