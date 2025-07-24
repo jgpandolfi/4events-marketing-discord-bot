@@ -9,6 +9,23 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 ### Em Desenvolvimento
 - Funcionalidades futuras serão listadas aqui
 
+## [1.0.2] - 2025-07-24
+
+### ✨ Adicionado
+- **Comando `/parceria`**: Novo comando para registro de parcerias comerciais com notificação (aviso) no canal de parcerias
+  - Parâmetros: `url_do_card` (URL do card no sistema) e `data_do_evento` (data do evento)
+  - Validação inteligente de URLs para domínios Pipe.run e 4.works e validação de datas (aceita eventos passados, diferente do comando marketing)
+
+  ### 🔧 Modificado
+- **Comando `/help`**: Atualizado para incluir documentação completa do novo comando `/parceria`
+- **Estrutura de Webhooks**: Separação de webhooks para diferentes tipos de solicitação
+  - `WEBHOOK_URL` para tarefas de marketing
+  - `WEBHOOK_URL_PARCERIA` para registro de parcerias
+- **Validação de Datas**: Aprimorada a função de validação de datas para suportar diferentes contextos
+  - Marketing: não aceita datas no passado
+  - Parceria: aceita datas passadas (eventos já realizados)
+
+
 ## [1.0.1] - 2025-07-22
 
 ### ✨ Adicionado

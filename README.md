@@ -1,32 +1,46 @@
-# 4.events Marketing Bot
+# 4.events Marketing Bot 🧡
 
-Bot do Discord para criação e gerenciamento de solicitações de tarefas de marketing integrado ao sistema N8N.
+Bot do Discord do time de Marketinda 4.events
+Auxilia no gerenciamento de solicitações de tarefas de marketing e acompanhametno de parcerias, de maneira integrada ao N8N.
 
 ## 📋 Sobre o Projeto
 
-Bot desenvolvido para automatizar o processo de solicitação de tarefas de marketing através de comandos slash no Discord, com integração direta ao sistema de automação N8N da 4.events.
+Bot desenvolvido para automatizar e facilitar os processo de solicitação de tarefas de marketing e de registro de novas parcerias no sistema, através de comandos slash no Discord, com integração direta ao sistema de automação N8N da 4.events.
 
 ## ✨ Funcionalidades
 
 - **Comando `/marketing`**: Cria solicitações de tarefas com validação de dados
+- **Comando `/parceria`**: Registra novas parcerias comerciais no sistema
 - **Comando `/ping`**: Verifica conectividade e status do bot
 - **Comando `/help`**: Exibe ajuda completa dos comandos
 - **Validação inteligente de datas**: Aceita múltiplos formatos (DD/MM/AAAA, D/M/AA, etc.)
-- **Integração com N8N**: Envio automático via webhook
-- **Resposta com link**: Retorna URL direta da tarefa criada
+- **Integração com N8N**: Envio automático de dados via webhook
+- **Resposta com link**: Sempre que possível retorna mensagens com URLs diretas para os sistemas integrados
 
 ## 🚀 Como Usar
 
-### Criando uma Tarefa
+### Solicitando uma Tarefa para o Time de Marketing
 `/marketing nome:Campanha Instagram detalhes:Criar 5 posts para o feed prazo:30/12/2025`
 
-### Verificando Status
+### Registrando uma Nova Parceria
+`/parceria url_do_card:https://app.pipe.run/cards/exemplo data_do_evento:15/06/2025`
+
+### Verificando Status do Bot
 `/ping`
 
-### Obtendo Ajuda
+### Obtendo Ajuda para Utilizar o Bot
 `/help`
 
-## ⚙️ Instalação
+## 🎯 Resumo de Comandos Disponíveis e Como Usá-los
+
+| Comando | Descrição | Parâmetros |
+|---------|-----------|------------|
+| `/marketing` | Cria tarefa de marketing | `nome`, `detalhes`, `prazo` |
+| `/parceria` | Registra parceria comercial | `url_do_card`, `data_do_evento` |
+| `/ping` | Verifica status do bot | Nenhum |
+| `/help` | Exibe ajuda dos comandos | Nenhum |
+
+## ⚙️ Instalação (Devs 👨‍💻)
 
 1. **Clone o repositório**
    `git clone <url-do-repositorio>`
@@ -37,12 +51,17 @@ Bot desenvolvido para automatizar o processo de solicitação de tarefas de mark
 
 3. **Configure as variáveis de ambiente (dotenv)**
    ```
+   # Discord
    BOT_TOKEN=seu_token_do_discord
    WEBHOOK=url_webhook
+
+   # N8N Endpoints
+   WEBHOOK=url_da_webhook_endpoint_para_comando_/marketing
+   WEBHOOK_PARCERIA=url_da_webhook_endpoint_para_comando_/parceria
    ```
 
 4. **Inicie o bot**
-   `npm start`
+   `npm start` ou `node src/index.js`
 
 ## 📁 Estrutura do Projeto
 ```
@@ -60,12 +79,6 @@ Bot desenvolvido para automatizar o processo de solicitação de tarefas de mark
 - **Discord.js** - Biblioteca para interação com Discord API
 - **N8N** - Automação de workflows
 - **dotenv** - Gerenciamento de variáveis de ambiente
-
-## 📝 Formato de Dados Aceitos
-
-- **Datas**: DD/MM/AAAA, D/M/AA, DD/M/AA, D/MM/AAAA
-- **Nome da tarefa**: Até 100 caracteres
-- **Detalhes**: Até 1000 caracteres
 
 ## 🔗 Links Úteis
 
