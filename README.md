@@ -11,10 +11,12 @@ Bot desenvolvido para automatizar e facilitar os processo de solicitação de ta
 
 - **Comando `/marketing`**: Cria solicitações de tarefas com validação de dados
 - **Comando `/parceria`**: Registra novas parcerias comerciais no sistema
+- **Comando `/cro`**: Obtém dados de desempenho e estatísticas do site e landing pages da 4.events (via Microsoft Clarity)
 - **Comando `/ping`**: Verifica conectividade e status do bot
 - **Comando `/help`**: Exibe ajuda completa dos comandos
 - **Validação inteligente de datas**: Aceita múltiplos formatos (DD/MM/AAAA, D/M/AA, etc.)
 - **Integração com N8N**: Envio automático de dados via webhook
+- **Integração com Microsoft Clarity**: Para obter dados de performance e desempenho do website e das landing pages
 - **Resposta com link**: Sempre que possível retorna mensagens com URLs diretas para os sistemas integrados
 
 ## 🚀 Como Usar
@@ -24,6 +26,9 @@ Bot desenvolvido para automatizar e facilitar os processo de solicitação de ta
 
 ### Registrando uma Nova Parceria
 `/parceria url_do_card:https://app.pipe.run/cards/exemplo data_do_evento:15/06/2025`
+
+### Obtendo Dados de Performance e Estatísticas (CRO)
+`/cro data_desejada:28/07/2025 final_da_url_desejada:credenciamento`
 
 ### Verificando Status do Bot
 `/ping`
@@ -37,6 +42,7 @@ Bot desenvolvido para automatizar e facilitar os processo de solicitação de ta
 |---------|-----------|------------|
 | `/marketing` | Cria tarefa de marketing | `nome`, `detalhes`, `prazo` |
 | `/parceria` | Registra parceria comercial | `url_do_card`, `data_do_evento` |
+| `/cro` | Dados de performance e estatísticas | `data_desejada` (opcional), `final_da_url_desejada` (opcional) |
 | `/ping` | Verifica status do bot | Nenhum |
 | `/help` | Exibe ajuda dos comandos | Nenhum |
 

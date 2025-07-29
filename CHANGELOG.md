@@ -9,6 +9,17 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 ### Em Desenvolvimento
 - Funcionalidades futuras serão listadas aqui
 
+## [1.0.3] - 2025-07-29
+
+### ✨ Adicionado
+- **Comando `/cro`**: Integração com Microsoft Clarity para obter dados e estatísticas de performance do site e landing pages da 4.events.
+  - Parâmetros opcionais para consulta por data e filtro por final da URL.
+  - Exibição formatada em embed dentro do Discord.
+  - Ranking dos top 5 sistemas operacionais com sessões ordenadas decrescentemente.
+
+### 🔧 Modificado
+- Atualização da documentação interna e do comando `/help` para incluir o novo comando `/cro` e suas funcionalidades.
+
 ## [1.0.2] - 2025-07-24
 
 ### ✨ Adicionado

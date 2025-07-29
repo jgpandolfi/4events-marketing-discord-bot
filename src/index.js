@@ -24,10 +24,25 @@ if (!process.env.CANAL_MARKETING) {
   process.exit(1)
 }
 
+if (!process.env.CLARITY_PROJECT_ID) {
+  console.error("❌ Erro: CLARITY_PROJECT_ID não está configurado no arquivo .env")
+  process.exit(1)
+}
+
+if (!process.env.CLARITY_API_TOKEN) {
+  console.error("❌ Erro: CLARITY_API_TOKEN não está configurado no arquivo .env")
+  process.exit(1)
+}
+
 
 // Configuração da webhook do N8N
 const WEBHOOK_URL = process.env.WEBHOOK
 const WEBHOOK_URL_PARCERIA = process.env.WEBHOOK_PARCERIA
+
+// Configuração da API do Microsoft Clarity
+const CLARITY_PROJECT_ID = process.env.CLARITY_PROJECT_ID
+const CLARITY_API_TOKEN = process.env.CLARITY_API_TOKEN
+const CLARITY_BASE_URL = "https://www.clarity.ms/export-data/api/v1"
 
 // Cria o cliente do Discord com as intents necessárias
 const client = new Client({
@@ -104,6 +119,25 @@ const cmdParceria = new SlashCommandBuilder()
       .setDescription("Data do evento (formato: DD/MM/AAAA)")
       .setRequired(true)
       .setMaxLength(10)
+  )
+
+// Define o comando slash /cro
+const cmdCro = new SlashCommandBuilder()
+  .setName("cro")
+  .setDescription("📊 Obtém dados de desempenho e estatísticas das páginas do site via Microsoft Clarity")
+  .addStringOption((option) =>
+    option
+      .setName("data_desejada")
+      .setDescription("Data para consulta das estatísticas (formato: DD/MM/AAAA) - padrão: hoje")
+      .setRequired(false)
+      .setMaxLength(10)
+  )
+  .addStringOption((option) =>
+    option
+      .setName("final_da_url_desejada")
+      .setDescription("Final da URL para análise (ex: credenciamento) - padrão: dados consolidados do site")
+      .setRequired(false)
+      .setMaxLength(200)
   )
 
 
@@ -216,6 +250,265 @@ function validarEFormatarData(dataInput) {
   }
 }
 
+// Função para calcular diferença de dias entre duas datas
+function calcularDiasEntreDatas(dataInicial, dataFinal) {
+  const diffTime = Math.abs(dataFinal - dataInicial)
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+  return diffDays
+}
+
+// Função para construir URL completa a partir do final da URL
+function construirURLCompleta(finalURL) {
+  const baseURL = "https://4.events/pt-br"
+  
+  if (!finalURL || finalURL.trim() === "") {
+    return baseURL + "/"
+  }
+  
+  let finalLimpo = finalURL.trim()
+  
+  // Remove barra do início se existir para evitar duplicação
+  if (finalLimpo.startsWith("/")) {
+    finalLimpo = finalLimpo.substring(1)
+  }
+  
+  // Se não há nada após remover a barra, retorna URL base
+  if (finalLimpo === "") {
+    return baseURL + "/"
+  }
+  
+  return baseURL + "/" + finalLimpo
+}
+
+// Função para buscar dados do Microsoft Clarity
+async function buscarDadosClarity(numDias, urlFiltro = null) {
+  try {
+    let params = {
+      numOfDays: numDias.toString()
+    }
+    
+    // Se não há filtro de URL, busca dados consolidados por OS
+    // Se há filtro de URL, busca dados específicos por página
+    if (urlFiltro) {
+      params.dimension1 = "Page"
+    } else {
+      params.dimension1 = "OS" // Dados consolidados por sistema operacional
+    }
+    
+    const queryString = new URLSearchParams(params).toString()
+    const url = `${CLARITY_BASE_URL}/project-live-insights?${queryString}`
+    
+    const headers = {
+      "Authorization": `Bearer ${CLARITY_API_TOKEN}`,
+      "Content-Type": "application/json"
+    }
+    
+    console.log(`📤 Fazendo requisição para Clarity API: ${url}`)
+    
+    const response = await fetch(url, {
+      method: "GET",
+      headers: headers
+    })
+    
+    if (!response.ok) {
+      throw new Error(`Erro HTTP: ${response.status} - ${response.statusText}`)
+    }
+    
+    const result = await response.json()
+    console.log("✅ Resposta da Clarity API recebida")
+    
+    return { success: true, data: result }
+    
+  } catch (error) {
+    console.error("❌ Erro ao buscar dados do Clarity:", error.message)
+    return { success: false, error: error.message }
+  }
+}
+
+// Função para buscar dados de eventos inteligentes do Microsoft Clarity
+async function buscarEventosInteligentesClarity(numDias, urlFiltro = null) {
+  try {
+    let params = {
+      numOfDays: numDias.toString(),
+      dimension1: "SmartEvent"
+    }
+    
+    const queryString = new URLSearchParams(params).toString()
+    const url = `${CLARITY_BASE_URL}/project-live-insights?${queryString}`
+    
+    const headers = {
+      "Authorization": `Bearer ${CLARITY_API_TOKEN}`,
+      "Content-Type": "application/json"
+    }
+    
+    console.log(`📤 Fazendo requisição para eventos inteligentes Clarity API: ${url}`)
+    
+    const response = await fetch(url, {
+      method: "GET",
+      headers: headers
+    })
+    
+    if (!response.ok) {
+      throw new Error(`Erro HTTP: ${response.status} - ${response.statusText}`)
+    }
+    
+    const result = await response.json()
+    console.log("✅ Resposta de eventos inteligentes da Clarity API recebida")
+    
+    return { success: true, data: result }
+    
+  } catch (error) {
+    console.error("❌ Erro ao buscar eventos inteligentes do Clarity:", error.message)
+    return { success: false, error: error.message }
+  }
+}
+
+// Função para processar e formatar dados do Clarity
+function processarDadosClarity(dadosClarity, urlAlvo = null) {
+  try {
+    if (!dadosClarity || !Array.isArray(dadosClarity) || dadosClarity.length === 0) {
+      return {
+        success: false,
+        erro: "Nenhum dado encontrado na resposta da API"
+      }
+    }
+    
+    const trafficData = dadosClarity.find(item => item.metricName === "Traffic")
+    
+    if (!trafficData || !trafficData.information || !Array.isArray(trafficData.information)) {
+      return {
+        success: false,
+        erro: "Dados de tráfego não encontrados"
+      }
+    }
+    
+    let dados = trafficData.information
+    
+    // Se temos URL alvo, filtra pelos dados dessa URL
+    if (urlAlvo) {
+      dados = dados.filter(item => {
+        return item.Page && item.Page.toLowerCase().includes(urlAlvo.toLowerCase())
+      })
+      
+      if (dados.length === 0) {
+        return {
+          success: false,
+          erro: `Nenhum dado encontrado para a URL: ${urlAlvo}`
+        }
+      }
+    }
+    
+    // Calcula totais
+    let totalSessoes = 0
+    let totalBots = 0
+    let totalUsuarios = 0
+    let totalPaginasPorSessao = 0
+    let totalPaginas = 0
+    
+    dados.forEach(item => {
+      const sessoes = parseInt(item.totalSessionCount || 0)
+      const bots = parseInt(item.totalBotSessionCount || 0)
+      const usuarios = parseInt(item.distantUserCount || 0)
+      const paginasPorSessao = parseFloat(item.PagesPerSessionPercentage || 0)
+      
+      totalSessoes += sessoes
+      totalBots += bots
+      totalUsuarios += usuarios
+      
+      // Calcula total de páginas vistas (sessões * páginas por sessão)
+      totalPaginas += Math.round(sessoes * paginasPorSessao)
+    })
+    
+    const sessaosSemBots = totalSessoes - totalBots
+    
+    // Calcula média real de páginas por sessão
+    const mediaPaginasPorSessao = totalSessoes > 0 ? (totalPaginas / totalSessoes).toFixed(2) : "0.00"
+    
+    // NOVA IMPLEMENTAÇÃO: Ordena os dados por sessões (do maior para o menor) e limita a 5
+    const dadosOrdenados = dados
+      .sort((a, b) => {
+        const sessoesA = parseInt(a.totalSessionCount || 0)
+        const sessoesB = parseInt(b.totalSessionCount || 0)
+        return sessoesB - sessoesA // Ordem decrescente
+      })
+      .slice(0, 5) // Limita aos top 5
+    
+    return {
+      success: true,
+      resumo: {
+        totalSessoes,
+        totalBots,
+        sessaosSemBots,
+        totalUsuarios,
+        mediaPaginasPorSessao,
+        percentualBots: totalSessoes > 0 ? ((totalBots / totalSessoes) * 100).toFixed(1) : 0
+      },
+      detalhes: dadosOrdenados, // Agora são os dados ordenados e limitados
+      totalItens: dados.length
+    }
+    
+  } catch (error) {
+    return {
+      success: false,
+      erro: `Erro ao processar dados: ${error.message}`
+    }
+  }
+}
+
+// Função para processar dados de eventos inteligentes
+function processarEventosInteligentes(dadosEventos) {
+  try {
+    if (!dadosEventos || !Array.isArray(dadosEventos) || dadosEventos.length === 0) {
+      return {
+        success: true,
+        totalEventos: 0,
+        eventosFormulario: 0
+      }
+    }
+    
+    const eventosData = dadosEventos.find(item => item.metricName === "Traffic")
+    
+    if (!eventosData || !eventosData.information || !Array.isArray(eventosData.information)) {
+      return {
+        success: true,
+        totalEventos: 0,
+        eventosFormulario: 0
+      }
+    }
+    
+    let totalEventos = 0
+    let eventosFormulario = 0
+    
+    eventosData.information.forEach(item => {
+      const count = parseInt(item.totalSessionCount || 0)
+      totalEventos += count
+      
+      // Verifica se é evento de "Enviar formulário"
+      const eventName = item.SmartEvent || ""
+      if (eventName.toLowerCase().includes("enviar formulário") || 
+          eventName.toLowerCase().includes("enviar formulario") ||
+          eventName.toLowerCase().includes("submit form") ||
+          eventName.toLowerCase().includes("form submit")) {
+        eventosFormulario += count
+      }
+    })
+    
+    return {
+      success: true,
+      totalEventos,
+      eventosFormulario
+    }
+    
+  } catch (error) {
+    console.error("❌ Erro ao processar eventos inteligentes:", error.message)
+    return {
+      success: true,
+      totalEventos: 0,
+      eventosFormulario: 0
+    }
+  }
+}
+
 
 // Função para enviar dados para a webhook do N8N (Marketing)
 async function enviarParaN8N(cardTitle, detalhes, prazo, usuario) {
@@ -249,7 +542,6 @@ async function enviarParaN8N(cardTitle, detalhes, prazo, usuario) {
     if (!response.ok) {
       throw new Error(`Erro HTTP: ${response.status} - ${response.statusText}`)
     }
-
 
     const result = await response.json().catch(() => ({ success: true }))
     
@@ -446,7 +738,6 @@ async function enviarNotificacaParceria(cardURL, dataEvento, usuario, nomeCard =
   }
 }
 
-
 // Função para formatar a data/hora em português
 function formatarDataHora() {
   const agora = new Date()
@@ -466,6 +757,11 @@ function truncarTexto(texto, maxLength = 1000) {
   return texto.substring(0, maxLength - 3) + "..."
 }
 
+// Função para formatar números grandes
+function formatarNumero(numero) {
+  return new Intl.NumberFormat('pt-BR').format(numero)
+}
+
 // Evento: Bot está pronto
 client.once("ready", async () => {
   try {
@@ -475,6 +771,7 @@ client.once("ready", async () => {
     await client.application.commands.set([
       cmdMarketing,
       cmdParceria,
+      cmdCro,
       cmdPing,
       cmdHelp,
     ])
@@ -768,6 +1065,197 @@ client.on("interactionCreate", async (interaction) => {
       }
     }
 
+    // Comando /cro
+    else if (interaction.commandName === "cro") {
+      const dataDesejada = interaction.options.getString("data_desejada")
+      const finalURLDesejada = interaction.options.getString("final_da_url_desejada")
+      
+      // Define data de hoje se não fornecida
+      let dataConsulta = new Date()
+      let numDias = 1
+      
+      // Se data foi fornecida, valida e calcula diferença
+      if (dataDesejada) {
+        const validacaoData = validarEFormatarData(dataDesejada)
+        if (!validacaoData.valido) {
+          await interaction.reply({
+            content: `❌ **Erro na data:** ${validacaoData.erro}`,
+            ephemeral: true,
+          })
+          return
+        }
+        
+        dataConsulta = validacaoData.dataObj
+        const hoje = new Date()
+        hoje.setHours(0, 0, 0, 0)
+        
+        // Calcula diferença de dias
+        numDias = calcularDiasEntreDatas(dataConsulta, hoje)
+        
+        // Se a data é futura, não é possível consultar
+        if (dataConsulta > hoje) {
+          await interaction.reply({
+            content: "❌ **Erro na data:** Não é possível consultar dados de datas futuras",
+            ephemeral: true,
+          })
+          return
+        }
+      }
+      
+      // Constrói URL completa se fornecida
+      let urlCompleta = null
+      let urlParaFiltro = null
+      let tipoAnalise = "dados consolidados do site"
+      
+      if (finalURLDesejada && finalURLDesejada.trim() !== "") {
+        urlCompleta = construirURLCompleta(finalURLDesejada)
+        urlParaFiltro = urlCompleta
+        tipoAnalise = `página específica "${urlCompleta}"`
+      } else {
+        // Sem filtro de URL = dados consolidados de todo o site
+        urlCompleta = "Todo o site (dados consolidados)"
+        urlParaFiltro = null
+        tipoAnalise = "dados consolidados de todo o site"
+      }
+      
+      // Resposta inicial
+      const dataFormatada = dataConsulta.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })
+      
+      await interaction.reply(`${obterEmoji("loading")} Buscando ${tipoAnalise} do dia ${dataFormatada}...`)
+
+      // Busca dados principais do Clarity
+      const resultado = await buscarDadosClarity(numDias, urlParaFiltro)
+      
+      if (resultado.success) {
+        // Processa os dados principais
+        const dadosProcessados = processarDadosClarity(resultado.data, urlParaFiltro)
+        
+        if (dadosProcessados.success) {
+          // Busca dados de eventos inteligentes
+          const resultadoEventos = await buscarEventosInteligentesClarity(numDias, urlParaFiltro)
+          let dadosEventos = { totalEventos: 0, eventosFormulario: 0 }
+          
+          if (resultadoEventos.success) {
+            dadosEventos = processarEventosInteligentes(resultadoEventos.data)
+            // Por enquanto, os dados inteligentes não estão sendo enviados
+            // para o usuário como resposta ao comando.
+            // Os eventos inteligentes não estão retornando o número correto.
+          }
+          
+          const { resumo, detalhes, totalItens } = dadosProcessados
+          
+          // Prepara os campos do embed
+          const embedFields = [
+            {
+              name: `${obterEmoji("planeta")} Análise realizada`,
+              value: `\`${urlCompleta}\``,
+              inline: false,
+            },
+            {
+              name: `${obterEmoji("relogio")} Período analisado`,
+              value: `\`${dataFormatada}\` (${numDias} dia${numDias > 1 ? 's' : ''})`,
+              inline: true,
+            },
+            {
+              name: `${obterEmoji("usuarios")} Total de sessões`,
+              value: `\`${formatarNumero(resumo.totalSessoes)}\``,
+              inline: true,
+            },
+            {
+              name: `${obterEmoji("equipe")} Sessões reais`,
+              value: `\`${formatarNumero(resumo.sessaosSemBots)}\``,
+              inline: true,
+            }
+          ]
+          
+          // Adiciona detalhes se disponíveis e se é página específica
+          if (detalhes && detalhes.length > 0 && urlParaFiltro) {
+            let detalhesTexto = ""
+            detalhes.forEach((item, index) => {
+              const label = item.OS || item.Page || `Item ${index + 1}`
+              const sessoes = formatarNumero(item.totalSessionCount || 0)
+              detalhesTexto += `• **${truncarTexto(label, 30)}**: ${sessoes} sessões\n`
+            })
+            
+            if (totalItens > 5) {
+              detalhesTexto += `*... e mais ${totalItens - 5} itens*`
+            }
+            
+            embedFields.push({
+              name: `${obterEmoji("info")} Detalhes`,
+              value: detalhesTexto || "Nenhum detalhe disponível",
+              inline: false,
+            })
+          } else if (!urlParaFiltro && detalhes && detalhes.length > 0) {
+            // Para dados consolidados, mostra top 5 sistemas operacionais ordenados
+            let detalhesTexto = ""
+            detalhes.forEach((item, index) => {
+              let os = item.OS || `Sistema ${index + 1}`
+              // Substitui "Other" por "Outros" em português
+              if (os.toLowerCase() === "other") {
+                os = "Outros"
+              }
+              const sessoes = formatarNumero(item.totalSessionCount || 0)
+              detalhesTexto += `• **${os}**: ${sessoes} sessões\n`
+            })
+            
+            if (totalItens > 5) {
+              detalhesTexto += `*... e mais ${totalItens - 5} sistemas*`
+            }
+            
+            embedFields.push({
+              name: `${obterEmoji("info")} Top 5 sistemas operacionais`,
+              value: detalhesTexto || "Nenhum detalhe disponível",
+              inline: false,
+            })
+          }
+          
+          // Cria embed de sucesso
+          const embed = {
+            color: 0xff4f00,
+            title: `${obterEmoji("certo")} Dados de performance (CRO)`,
+            description: "**Estatísticas de desempenho obtidas:**",
+            fields: embedFields,
+            footer: {
+              text: "4.events Marketing Bot • Dados obtidos do Microsoft Clarity",
+            },
+            timestamp: new Date().toISOString(),
+          }
+
+          await interaction.editReply({
+            content: "",
+            embeds: [embed],
+          })
+
+          // Prepara dados do usuário para log
+          const usuario = {
+            username: interaction.user.username,
+            displayName: interaction.member?.displayName || interaction.user.username,
+            id: interaction.user.id,
+            tag: interaction.user.tag,
+          }
+
+          console.log(`✅ Dados do Clarity consultados por ${usuario.displayName}: "${urlCompleta}" - ${dataFormatada}`)
+
+        } else {
+          // Erro no processamento
+          await interaction.editReply({
+            content: `❌ **Erro ao processar dados**\n\`\`\`${dadosProcessados.erro}\`\`\`\nTente novamente ou verifique os parâmetros.`,
+          })
+          
+          console.error(`❌ Erro ao processar dados do Clarity: ${dadosProcessados.erro}`)
+        }
+        
+      } else {
+        // Erro na consulta
+        await interaction.editReply({
+          content: `❌ **Erro ao consultar Microsoft Clarity**\n\`\`\`${resultado.error}\`\`\`\nTente novamente ou entre em contato com o suporte.`,
+        })
+        
+        console.error(`❌ Erro ao consultar Clarity API: ${resultado.error}`)
+      }
+    }
+
     // Comando /ping
     else if (interaction.commandName === "ping") {
       const ping = Math.round(client.ws.ping)
@@ -807,7 +1295,7 @@ client.on("interactionCreate", async (interaction) => {
       const embed = {
         color: 0xff4f00,
         title: `${obterEmoji("faq")} Central de ajuda`,
-        description: "**Bot para criação de solicitações de tarefas de marketing e registro de parcerias**\n" +
+        description: "**Bot para criação de solicitações de tarefas de marketing, registro de parcerias e análise de performance**\n" +
                      "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
         fields: [
           {
@@ -832,6 +1320,19 @@ client.on("interactionCreate", async (interaction) => {
                    "• `url_do_card` - URL do card no sistema *(máx: 500 caracteres)*\n" +
                    "• `data_do_evento` - Data do evento no formato **DD/MM/AAAA**\n\n" +
                    "**Exemplo:** `/parceria url_do_card:https://app.pipe.run/... data_do_evento:15/08/2025`",
+            inline: false,
+          },
+          {
+            name: "📊 `/cro`",
+            value: "**Descrição:** Obtém dados de performance via Microsoft Clarity\n" +
+                   "**Parâmetros (opcionais):**\n" +
+                   "• `data_desejada` - Data para consulta no formato **DD/MM/AAAA** *(padrão: hoje)*\n" +
+                   "• `final_da_url_desejada` - Final da URL para análise *(padrão: dados consolidados)*\n\n" +
+                   "**Exemplos:**\n" +
+                   "• `/cro` - Dados consolidados de hoje\n" +
+                   "• `/cro data_desejada:20/07/2025` - Dados consolidados de data específica\n" +
+                   "• `/cro final_da_url_desejada:credenciamento` - Página específica de hoje\n" +
+                   "• `/cro data_desejada:20/07/2025 final_da_url_desejada:/credenciamento` - Página específica em data específica",
             inline: false,
           },
           {
@@ -864,10 +1365,28 @@ client.on("interactionCreate", async (interaction) => {
             name: "❌ **Regras Importantes**",
             value: "• Marketing: Não aceita datas no passado\n" +
                    "• Parceria: Aceita datas passadas\n" +
+                   "• CRO: Não aceita datas futuras\n" +
                    "• Use apenas números e barras `/`\n" +
                    "• Anos de 2 dígitos assumem 20XX\n" +
                    "• Validação automática de datas",
             inline: true,
+          },
+          {
+            name: "🌐 **ANÁLISE DE PERFORMANCE (/cro)**",
+            value: "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+            inline: false,
+          },
+          {
+            name: "📊 **Métricas Disponíveis**",
+            value: "• **Total de Sessões** - Todas as visitas registradas\n" +
+                   "• **Sessões Reais** - Visitas excluindo bots\n" +
+                   "• **Usuários Únicos** - Visitantes únicos no período\n" +
+                   "• **Páginas/Sessão** - Média real de páginas por visita\n" +
+                   "• **Eventos Inteligentes** - Total de eventos capturados\n" +
+                   "• **Envios de Formulário** - Submissões de formulários\n" +
+                   "• **Dados Consolidados** - Estatísticas de todo o site\n" +
+                   "• **Top 5 Sistemas Operacionais** - Ranking ordenado por sessões",
+            inline: false,
           },
           {
             name: "🔗 **RECURSOS ADICIONAIS**",
@@ -881,7 +1400,10 @@ client.on("interactionCreate", async (interaction) => {
                    "• Validação inteligente de dados e URLs\n" +
                    "• Confirmação visual com embed\n" +
                    "• Registro de quem solicitou/registrou\n" +
-                   "• Alertas automáticos nos canais específicos",
+                   "• Alertas automáticos nos canais específicos\n" +
+                   "• Dados em tempo real do Microsoft Clarity\n" +
+                   "• Análise consolidada ou por página específica\n" +
+                   "• Ranking ordenado de sistemas operacionais (Top 5)",
             inline: false,
           }
         ],
