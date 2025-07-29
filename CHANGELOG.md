@@ -9,6 +9,25 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 ### Em Desenvolvimento
 - Funcionalidades futuras serão listadas aqui
 
+## [1.0.4] - 2025-07-29
+
+### ✨ Adicionado
+- **Sistema de Retry Automático**: Implementado sistema inteligente de retry para comandos `/marketing` e `/parceria`
+  - **3 tentativas automáticas** para erros HTTP 500 e erros temporários de servidor
+  - **Backoff progressivo** com multiplicador de 1.5x (1s → 1.5s → 2.25s)
+  - **Detecção inteligente de erros**: Distingue entre erros temporários (que justificam retry) e erros permanentes
+  - **Configuração flexível** através do objeto `RETRY_CONFIG` para fácil ajuste de parâmetros
+  - **Primeira tentativa silenciosa**: Usuários não percebem o sistema de retry quando tudo funciona normalmente
+  - **Feedback visual progressivo**: A partir da segunda tentativa, usuários recebem informações claras sobre o status
+  - **Mensagens contextuais**: Explicações específicas sobre instabilidades temporárias vs erros permanentes
+  - **Sugestões de ação**: Orientações claras quando todas as tentativas falham
+
+### 🔧 Modificado
+- **Funções de Envio**: Refatoradas `enviarParaN8N` e `enviarParceriaParaN8N` para trabalhar com o sistema de retry
+- **Processamento de Comandos**: Comandos `/marketing` e `/parceria` agora utilizam `executarComRetryComFeedback`
+- **Configuração Centralizada**: Parâmetros de retry centralizados em `RETRY_CONFIG` para fácil manutenção
+- **Comando `/help`**: Atualizado para incluir informação sobre o sistema de retry automático
+
 ## [1.0.3] - 2025-07-29
 
 ### ✨ Adicionado

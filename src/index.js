@@ -12,6 +12,13 @@ const emojis = require("./emojis.json")
 
 dotenv.config()
 
+// Configurações de retry
+const RETRY_CONFIG = {
+  maxTentativas: 3,
+  delayInicial: 1000, // 1 segundo
+  backoffMultiplier: 1.5, // Aumenta 50% a cada tentativa
+  retriableErrors: ['500', 'Internal Server Error', 'ECONNRESET', 'ETIMEDOUT']
+}
 
 // Validação das variáveis de ambiente
 if (!process.env.BOT_TOKEN) {
@@ -34,7 +41,6 @@ if (!process.env.CLARITY_API_TOKEN) {
   process.exit(1)
 }
 
-
 // Configuração da webhook do N8N
 const WEBHOOK_URL = process.env.WEBHOOK
 const WEBHOOK_URL_PARCERIA = process.env.WEBHOOK_PARCERIA
@@ -53,6 +59,108 @@ const client = new Client({
   ],
 })
 
+// Função auxiliar para implementar retry com backoff progressivo
+async function executarComRetry(funcaoAsync, parametros, maxTentativas = 3, delayInicial = 1000) {
+  let ultimoErro = null
+  
+  for (let tentativa = 1; tentativa <= maxTentativas; tentativa++) {
+    try {
+      console.log(`📤 Tentativa ${tentativa}/${maxTentativas}`)
+      
+      const resultado = await funcaoAsync(...parametros)
+      
+      // Se sucesso, retorna imediatamente
+      if (resultado.success) {
+        if (tentativa > 1) {
+          console.log(`✅ Sucesso na tentativa ${tentativa}/${maxTentativas}`)
+        }
+        return resultado
+      }
+      
+      // Se não é erro 500, não tenta novamente
+      if (!resultado.error?.includes('500') && !resultado.error?.includes('Internal Server Error')) {
+        console.log(`❌ Erro não temporário detectado, não retentar: ${resultado.error}`)
+        return resultado
+      }
+      
+      ultimoErro = resultado
+      
+      // Se não é a última tentativa, aguarda antes de tentar novamente
+      if (tentativa < maxTentativas) {
+        const delay = delayInicial * Math.pow(RETRY_CONFIG.backoffMultiplier, tentativa - 1) // Backoff progressivo
+        console.log(`⏳ Aguardando ${delay}ms antes da próxima tentativa...`)
+        await new Promise(resolve => setTimeout(resolve, delay))
+      }
+      
+    } catch (error) {
+      ultimoErro = { success: false, error: error.message }
+      
+      if (tentativa < maxTentativas) {
+        const delay = delayInicial * Math.pow(RETRY_CONFIG.backoffMultiplier, tentativa - 1)
+        console.log(`⏳ Erro capturado, aguardando ${delay}ms antes da próxima tentativa...`)
+        await new Promise(resolve => setTimeout(resolve, delay))
+      }
+    }
+  }
+  
+  // Se chegou aqui, todas as tentativas falharam
+  console.error(`❌ Todas as ${maxTentativas} tentativas falharam`)
+  return ultimoErro || { success: false, error: "Todas as tentativas falharam" }
+}
+
+// Função para executar retry com feedback visual para o usuário
+async function executarComRetryComFeedback(interaction, funcaoAsync, parametros, tipoOperacao = "operação") {
+  let ultimoErro = null
+  const maxTentativas = RETRY_CONFIG.maxTentativas
+  const delayInicial = RETRY_CONFIG.delayInicial
+  
+  for (let tentativa = 1; tentativa <= maxTentativas; tentativa++) {
+    try {
+      // Atualiza mensagem durante tentativas (só a partir da segunda)
+      if (tentativa > 1) {
+        const loadingEmoji = obterEmoji("loading")
+        await interaction.editReply(
+          `${loadingEmoji} Tentativa ${tentativa}/${maxTentativas} - Processando ${tipoOperacao}...`
+        )
+      }
+      
+      const resultado = await funcaoAsync(...parametros)
+      
+      if (resultado.success) {
+        return resultado
+      }
+      
+      // Se não é erro 500, não tenta novamente
+      if (!resultado.error?.includes('500') && !resultado.error?.includes('Internal Server Error')) {
+        return resultado
+      }
+      
+      ultimoErro = resultado
+      
+      // Aguarda antes da próxima tentativa
+      if (tentativa < maxTentativas) {
+        const delay = delayInicial * Math.pow(RETRY_CONFIG.backoffMultiplier, tentativa - 1)
+        
+        const loadingEmoji = obterEmoji("loading")
+        await interaction.editReply(
+          `${loadingEmoji} Instabilidade detectada. Tentando novamente em ${Math.round(delay/1000)}s... (${tentativa}/${maxTentativas})`
+        )
+        
+        await new Promise(resolve => setTimeout(resolve, delay))
+      }
+      
+    } catch (error) {
+      ultimoErro = { success: false, error: error.message }
+      
+      if (tentativa < maxTentativas) {
+        const delay = delayInicial * Math.pow(RETRY_CONFIG.backoffMultiplier, tentativa - 1)
+        await new Promise(resolve => setTimeout(resolve, delay))
+      }
+    }
+  }
+  
+  return ultimoErro || { success: false, error: "Todas as tentativas falharam" }
+}
 
 // Função auxiliar para obter string de emoji personalizado do bot (emojis.json)
 function obterEmoji(nomeEmoji) {
@@ -140,18 +248,15 @@ const cmdCro = new SlashCommandBuilder()
       .setMaxLength(200)
   )
 
-
 // Define o comando /ping para teste
 const cmdPing = new SlashCommandBuilder()
   .setName("ping")
   .setDescription("🏓 Testa a conectividade do bot")
 
-
 // Define o comando /help
 const cmdHelp = new SlashCommandBuilder()
   .setName("help")
   .setDescription("❓ Mostra informações de ajuda sobre os comandos")
-
 
 // Função para validar URL
 function validarURL(url) {
@@ -509,7 +614,6 @@ function processarEventosInteligentes(dadosEventos) {
   }
 }
 
-
 // Função para enviar dados para a webhook do N8N (Marketing)
 async function enviarParaN8N(cardTitle, detalhes, prazo, usuario) {
   try {
@@ -527,7 +631,6 @@ async function enviarParaN8N(cardTitle, detalhes, prazo, usuario) {
       plataforma: "Discord"
     }
 
-
     console.log("📤 Enviando dados para N8N (Marketing):", JSON.stringify(body, null, 2))
 
     const response = await fetch(WEBHOOK_URL, {
@@ -537,7 +640,6 @@ async function enviarParaN8N(cardTitle, detalhes, prazo, usuario) {
       },
       body: JSON.stringify(body),
     })
-
 
     if (!response.ok) {
       throw new Error(`Erro HTTP: ${response.status} - ${response.statusText}`)
@@ -835,8 +937,9 @@ client.on("interactionCreate", async (interaction) => {
         return
       }
 
-      // Resposta inicial
-      await interaction.reply(`${obterEmoji("loading")} Criando solicitação de tarefa para o marketing...`)
+      // Resposta inicial (primeira tentativa - mensagem normal)
+      const loadingEmoji = obterEmoji("loading")
+      await interaction.reply(`${loadingEmoji} Criando solicitação de tarefa para o marketing...`)
 
       // Prepara dados do usuário
       const usuario = {
@@ -852,12 +955,12 @@ client.on("interactionCreate", async (interaction) => {
         dataISO: validacaoData.iso
       }
 
-      // Envia para o N8N
-      const resultado = await enviarParaN8N(
-        nomeDemanda.trim(),
-        detalhesDemanda.trim(),
-        dadosPrazo,
-        usuario
+      // Envia para o N8N com retry e feedback visual
+      const resultado = await executarComRetryComFeedback(
+        interaction,
+        enviarParaN8N,
+        [nomeDemanda.trim(), detalhesDemanda.trim(), dadosPrazo, usuario],
+        "solicitação de marketing"
       )
 
       if (resultado.success) {
@@ -936,11 +1039,21 @@ client.on("interactionCreate", async (interaction) => {
         console.log(`✅ Solicitação criada por ${usuario.displayName}: "${nomeDemanda}" - Prazo: ${validacaoData.dataFormatada}`)
 
       } else {
-        // Erro - edita a resposta
-        await interaction.editReply({
-          content: `❌ **Erro ao criar solicitação**\n\`\`\`${resultado.error}\`\`\`\nTente novamente ou entre em contato com o suporte.`,
-        })
+        // Mensagem de erro melhorada
+        const isServerError = resultado.error?.includes('500') || 
+                             resultado.error?.includes('Internal Server Error')
+        
+        let errorMessage = `❌ **Erro ao criar solicitação**\n\`\`\`${resultado.error}\`\`\``
+        
+        if (isServerError) {
+          errorMessage += `\n\n💡 **Este parece ser um erro temporário do servidor.**\n` +
+                         `O bot tentou ${RETRY_CONFIG.maxTentativas} vezes antes de desistir.\n` +
+                         `**Sugestão:** Tente novamente em alguns minutos ou entre em contato com o suporte.`
+        } else {
+          errorMessage += `\n\n**Tente novamente ou entre em contato com o suporte.**`
+        }
 
+        await interaction.editReply({ content: errorMessage })
         console.error(`❌ Falha ao criar solicitação para ${usuario.displayName}: ${resultado.error}`)
       }
     }
@@ -970,8 +1083,9 @@ client.on("interactionCreate", async (interaction) => {
         return
       }
 
-      // Resposta inicial
-      await interaction.reply(`${obterEmoji("loading")} Registrando parceria comercial...`)
+      // Resposta inicial (primeira tentativa - mensagem normal)
+      const loadingEmoji = obterEmoji("loading")
+      await interaction.reply(`${loadingEmoji} Registrando parceria comercial...`)
 
       // Prepara dados do usuário
       const usuario = {
@@ -987,11 +1101,12 @@ client.on("interactionCreate", async (interaction) => {
         dataISO: validacaoData.iso
       }
 
-      // Envia para o N8N
-      const resultado = await enviarParceriaParaN8N(
-        validacaoURL.url,
-        dadosEvento,
-        usuario
+      // Envia para o N8N com retry e feedback visual
+      const resultado = await executarComRetryComFeedback(
+        interaction,
+        enviarParceriaParaN8N,
+        [validacaoURL.url, dadosEvento, usuario],
+        "registro de parceria"
       )
 
       if (resultado.success) {
@@ -1056,11 +1171,21 @@ client.on("interactionCreate", async (interaction) => {
         console.log(`✅ Parceria registrada por ${usuario.displayName}: "${nomeCard || 'Card não identificado'}" - Data: ${validacaoData.dataFormatada}`)
 
       } else {
-        // Erro - edita a resposta
-        await interaction.editReply({
-          content: `❌ **Erro ao registrar parceria**\n\`\`\`${resultado.error}\`\`\`\nTente novamente ou entre em contato com o suporte.`,
-        })
+        // Mensagem de erro melhorada
+        const isServerError = resultado.error?.includes('500') || 
+                             resultado.error?.includes('Internal Server Error')
+        
+        let errorMessage = `❌ **Erro ao registrar parceria**\n\`\`\`${resultado.error}\`\`\``
+        
+        if (isServerError) {
+          errorMessage += `\n\n💡 **Este parece ser um erro temporário do servidor.**\n` +
+                         `O bot tentou ${RETRY_CONFIG.maxTentativas} vezes antes de desistir.\n` +
+                         `**Sugestão:** Tente novamente em alguns minutos ou entre em contato com o suporte.`
+        } else {
+          errorMessage += `\n\n**Tente novamente ou entre em contato com o suporte.**`
+        }
 
+        await interaction.editReply({ content: errorMessage })
         console.error(`❌ Falha ao registrar parceria para ${usuario.displayName}: ${resultado.error}`)
       }
     }
@@ -1403,7 +1528,8 @@ client.on("interactionCreate", async (interaction) => {
                    "• Alertas automáticos nos canais específicos\n" +
                    "• Dados em tempo real do Microsoft Clarity\n" +
                    "• Análise consolidada ou por página específica\n" +
-                   "• Ranking ordenado de sistemas operacionais (Top 5)",
+                   "• Ranking ordenado de sistemas operacionais (Top 5)\n" +
+                   "• **Sistema de retry automático** - Tenta novamente em caso de instabilidade temporária",
             inline: false,
           }
         ],
@@ -1452,7 +1578,7 @@ client.on("reconnecting", () => {
 
 // Tratamento de erros não capturados
 process.on("unhandledRejection", (reason, promise) => {
-  console.error("❌ Unhandled Rejection at:", promise, "reason:", promise)
+  console.error("❌ Unhandled Rejection at:", promise, "reason:", reason)
 })
 
 process.on("uncaughtException", (error) => {

@@ -18,6 +18,7 @@ Bot desenvolvido para automatizar e facilitar os processo de solicitação de ta
 - **Integração com N8N**: Envio automático de dados via webhook
 - **Integração com Microsoft Clarity**: Para obter dados de performance e desempenho do website e das landing pages
 - **Resposta com link**: Sempre que possível retorna mensagens com URLs diretas para os sistemas integrados
+- **Robustez Avançada**: Resistência a falhas temporárias do N8N com backoff progressivo e sistema de retries
 
 ## 🚀 Como Usar
 
@@ -45,6 +46,16 @@ Bot desenvolvido para automatizar e facilitar os processo de solicitação de ta
 | `/cro` | Dados de performance e estatísticas | `data_desejada` (opcional), `final_da_url_desejada` (opcional) |
 | `/ping` | Verifica status do bot | Nenhum |
 | `/help` | Exibe ajuda dos comandos | Nenhum |
+
+## 🛡️ Sistema de Retry Automático (Backoff Progressivo)
+
+O bot conta com um **sistema automático de retry**, para os comandos `/makerting`e `/parceria`, que garante maior confiabilidade ao enviar dados para o N8N:
+
+### 🔄 **Como Funciona**
+- **3 tentativas automáticas** para erros temporários (HTTP 500)
+- **Backoff progressivo**: Delays inteligentes entre tentativas (1s → 1.5s → 2.25s)
+- **Detecção do tipo de erro**: Distingue erros temporários de permanentes
+- **Transparência**: Feedback claro para o usuário caso haja erros na operação
 
 ## ⚙️ Instalação (Devs 👨‍💻)
 
@@ -84,6 +95,7 @@ Bot desenvolvido para automatizar e facilitar os processo de solicitação de ta
 - **Node.js** - Runtime JavaScript
 - **Discord.js** - Biblioteca para interação com Discord API
 - **N8N** - Automação de workflows
+- **Microsoft Clarity Data Export API** - Obtenção de dados e estatísticas de CRO
 - **dotenv** - Gerenciamento de variáveis de ambiente
 
 ## 🔗 Links Úteis
@@ -99,5 +111,5 @@ Bot criado para otimizar o fluxo de trabalho da equipe de marketing da 4.events.
 ---
 
 **Status**: ✅ Ativo e funcionando  
-**Versão**: 1.0.0  
+**Versão**: 1.0.4
 **Última atualização**: Julho 2025
