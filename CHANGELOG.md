@@ -9,6 +9,28 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 ### Em Desenvolvimento
 - Funcionalidades futuras serão listadas aqui
 
+## [1.0.5] - 2025-08-15
+
+### ✨ Adicionado
+- **Comando `/midiakit`**: Novo comando para acesso ao mídia kit oficial da 4.events
+  - **Acesso direto aos materiais visuais e audiovisuais** oficiais da empresa
+  - **Resposta pública** para facilitar compartilhamento entre equipes
+
+- **Comando `/apresentações`**: Novo comando para acesso às apresentações comerciais da 4.events
+  - **Apresentações comerciais em PDF e editáveis** (Google Slides, PowerPoint)
+  - **Aviso de uso interno exclusivo** para segurança dos materiais
+
+- **Comando `/modelos`**: Novo comando para acesso aos modelos de documentos com branding da 4.events
+  - **Templates de documentos timbrados** oficiais da empresa
+  - **Templates para relatórios** e apresentações padronizadas
+  - **Documentos com identidade visual** consistente
+  - **Proteção de uso interno** com avisos de confidencialidade
+
+### 🔧 Modificado
+- **Comando `/help`**: Atualizado para incluir documentação completa dos três novos comandos
+  - Adicionadas instruções de uso para `/midiakit`, `/apresentações` e `/modelos`
+  - Incluídos avisos sobre uso interno para comandos com materiais confidenciais
+
 ## [1.0.4] - 2025-07-29
 
 ### ✨ Adicionado

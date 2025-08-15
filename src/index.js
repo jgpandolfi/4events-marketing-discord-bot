@@ -248,6 +248,21 @@ const cmdCro = new SlashCommandBuilder()
       .setMaxLength(200)
   )
 
+// Define o comando slash /midiakit
+const cmdMidiaKit = new SlashCommandBuilder()
+  .setName("midiakit")
+  .setDescription("🎨 Acessa o mídia kit oficial da 4.events com logos, ícones e materiais audiovisuais")
+
+// Define o comando slash /apresentações
+const cmdApresentacoes = new SlashCommandBuilder()
+  .setName("apresentações")
+  .setDescription("📊 Acessa as apresentações comerciais oficiais da 4.events em PDF e editáveis online")
+
+// Define o comando slash /modelos
+const cmdModelos = new SlashCommandBuilder()
+  .setName("modelos")
+  .setDescription("📄 Acessa os modelos de documentos e templates com branding da 4.events")
+
 // Define o comando /ping para teste
 const cmdPing = new SlashCommandBuilder()
   .setName("ping")
@@ -874,6 +889,9 @@ client.once("ready", async () => {
       cmdMarketing,
       cmdParceria,
       cmdCro,
+      cmdMidiaKit,
+      cmdApresentacoes,
+      cmdModelos,
       cmdPing,
       cmdHelp,
     ])
@@ -1381,6 +1399,157 @@ client.on("interactionCreate", async (interaction) => {
       }
     }
 
+    // Comando /midiakit
+    else if (interaction.commandName === "midiakit") {
+      const embed = {
+        color: 0xff4f00,
+        title: `${obterEmoji("info")} Mídia Kit Oficial 4.events`,
+        description: "**Acesse todos os materiais visuais e audiovisuais oficiais da 4.events**\n" +
+                     "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        fields: [
+          {
+            name: `${obterEmoji("foto")} **Logos Oficiais da 4.events**`,
+            value: "**📁 [CLIQUE AQUI para acessar a pasta no Google Drive](https://drive.google.com/drive/folders/1N24emGD_ZnB4Eu88UXfdNhZVnY8-uul0?usp=sharing)**\n" +
+                   "• Logotipos em diferentes versões (horizontal, profile, negativo)\n" +
+                   "• Diferentes formatos em alta resolução\n" +
+                   "• Versões para fundo claro e escuro\n",
+            inline: false,
+          },
+          {
+            name: `${obterEmoji("safira")} **Ícones dos Produtos e Features**`,
+            value: "**📁 [CLIQUE AQUI para acessar a pasta no Google Drive](https://drive.google.com/drive/folders/1TbxLIiJFNF9PdjtuzUCBmjc9rIONoqZT?usp=sharing)**\n" +
+                   "• Ícones de todas as funcionalidades (features) dos apps 4.events\n",
+            inline: false,
+          },
+          {
+            name: `${obterEmoji("youtube")} **Materiais Audiovisuais e Animações**`,
+            value: "**📁 [CLIQUE AQUI para acessar a pasta no Google Drive](https://drive.google.com/drive/folders/1QVlCzr8clpLih7vUEEzjVD6Ey53xeSyw?usp=sharing)**\n" +
+                   "• Logos animados\n" +
+                   "• Intros e outros materiais para vídeos\n" +
+                   "• Elementos visuais em movimento para apresentações\n" +
+                   "• Materiais para redes sociais e campanhas digitais",
+            inline: false,
+          },
+          {
+            name: `${obterEmoji("warn")} **Diretrizes de Uso**`,
+            value: "• **Mantenha as proporções originais dos logos**\n" +
+                   "• **Respeite as cores oficiais da marca**\n" +
+                   "• **Para dúvidas sobre uso, consulte o time de marketing**",
+            inline: false,
+          }
+        ],
+        footer: {
+          text: "4.events Marketing Bot • Mídia Kit Oficial",
+        },
+        timestamp: new Date().toISOString(),
+      }
+
+      await interaction.reply({
+        embeds: [embed],
+        ephemeral: false, // Torna a resposta visível para todos
+      })
+
+      // Prepara dados do usuário para log
+      const usuario = {
+        username: interaction.user.username,
+        displayName: interaction.member?.displayName || interaction.user.username,
+        id: interaction.user.id,
+        tag: interaction.user.tag,
+      }
+
+      console.log(`✅ Mídia kit acessado por ${usuario.displayName}`)
+    }
+
+    // Comando /apresentações
+    else if (interaction.commandName === "apresentações") {
+      const embed = {
+        color: 0xff4f00,
+        title: `${obterEmoji("info")} Apresentações Comerciais 4.events`,
+        description: "**Acesse todas as apresentações comerciais oficiais da 4.events**\n" +
+                     "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        fields: [
+          {
+            name: `${obterEmoji("pasta")} **Apresentações Comerciais**`,
+            value: "**📁 [CLIQUE AQUI para acessar pasta no Google Drive](https://drive.google.com/drive/folders/1Pgveln9kAC5RBaUce78ST6JakIPNIKOW?usp=sharing)**\n" +
+                   "• Apresentações comerciais em formato PDF\n" +
+                   "• Apresentações editáveis online\n" +
+                   "• Slides com dados atualizados e cases de sucesso",
+            inline: false,
+          },
+          {
+            name: `${obterEmoji("warn")} **Importante:**`,
+            value: "• Estas apresentações são de uso interno exclusivo da 4.events\n",
+            inline: false,
+          }
+        ],
+        footer: {
+          text: "4.events Marketing Bot • Apresentações Comerciais • Uso Interno",
+        },
+        timestamp: new Date().toISOString(),
+      }
+
+      await interaction.reply({
+        embeds: [embed],
+        ephemeral: false, // Torna a resposta visível para todos
+      })
+
+      // Prepara dados do usuário para log
+      const usuario = {
+        username: interaction.user.username,
+        displayName: interaction.member?.displayName || interaction.user.username,
+        id: interaction.user.id,
+        tag: interaction.user.tag,
+      }
+
+      console.log(`✅ Apresentações acessadas por ${usuario.displayName}`)
+    }
+
+    // Comando /modelos
+    else if (interaction.commandName === "modelos") {
+      const embed = {
+        color: 0xff4f00,
+        title: `${obterEmoji("info")} Modelos/Templates de Documentos 4.events`,
+        description: "**Acesse todos os modelos de documentos e templates com branding da 4.events**\n" +
+                     "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        fields: [
+          {
+            name: `${obterEmoji("pasta")} **Modelos de Documentos**`,
+            value: "**📁 [CLIQUE AQUI para Acessar pasta no Google Drive](https://drive.google.com/drive/folders/1XlQOqlj7V6MV4O44goL51Zv_VjwDd8q6?usp=sharing)**\n" +
+                   "• Templates de documentos timbrados da 4.events\n" +
+                   "• Templates para relatórios e apresentações\n" +
+                   "• Documentos com identidade visual padronizada\n",
+            inline: false,
+          },
+          {
+            name: `${obterEmoji("warn")} **Importante:**`,
+            value: "• Estes modelos são de uso interno exclusivo da 4.events\n" +
+                   "• Não compartilhe externamente sem autorização\n" +
+                   "• Mantenha sempre a identidade visual padrão\n",
+            inline: false,
+          }
+        ],
+        footer: {
+          text: "4.events Marketing Bot • Modelos de Documentos • Uso Interno",
+        },
+        timestamp: new Date().toISOString(),
+      }
+
+      await interaction.reply({
+        embeds: [embed],
+        ephemeral: false, // Torna a resposta visível para todos
+      })
+
+      // Prepara dados do usuário para log
+      const usuario = {
+        username: interaction.user.username,
+        displayName: interaction.member?.displayName || interaction.user.username,
+        id: interaction.user.id,
+        tag: interaction.user.tag,
+      }
+
+      console.log(`✅ Modelos acessados por ${usuario.displayName}`)
+    }
+
     // Comando /ping
     else if (interaction.commandName === "ping") {
       const ping = Math.round(client.ws.ping)
@@ -1419,8 +1588,9 @@ client.on("interactionCreate", async (interaction) => {
     else if (interaction.commandName === "help") {
       const embed = {
         color: 0xff4f00,
-        title: `${obterEmoji("faq")} Central de ajuda`,
-        description: "**Bot para criação de solicitações de tarefas de marketing, registro de parcerias e análise de performance**\n" +
+        title: `${obterEmoji("ajuda")} Central de ajuda`,
+        description: "**Bot para criação de solicitações de tarefas de marketing, registro de parcerias e análise de performance.**\n" +
+                    "Além dessas funcionalidades principais, também existem funcionalidades para auxiliar em demais tarefas do dia a dia.\n" +
                      "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
         fields: [
           {
@@ -1461,6 +1631,29 @@ client.on("interactionCreate", async (interaction) => {
             inline: false,
           },
           {
+            name: "🎨 `/midiakit`",
+            value: "**Descrição:** Acessa o mídia kit oficial da 4.events\n" +
+                   "**Uso:** Digite `/midiakit` para visualizar todos os links dos materiais visuais\n" +
+                   "**Conteúdo:** Logos oficiais, ícones de produtos e materiais audiovisuais",
+            inline: false,
+          },
+          {
+            name: "📊 `/apresentações`",
+            value: "**Descrição:** Acessa as apresentações comerciais oficiais da 4.events\n" +
+                   "**Uso:** Digite `/apresentações` para acessar apresentações em PDF e editáveis\n" +
+                   "**Conteúdo:** Apresentações comerciais, técnicas e de vendas\n" +
+                   "**⚠️ Uso interno exclusivo - não compartilhar externamente**",
+            inline: false,
+          },
+          {
+            name: "📄 `/modelos`",
+            value: "**Descrição:** Acessa modelos de documentos e templates com branding da 4.events\n" +
+                   "**Uso:** Digite `/modelos` para acessar templates de documentos\n" +
+                   "**Conteúdo:** Documentos timbrados, contratos, propostas e relatórios\n" +
+                   "**⚠️ Uso interno exclusivo - não compartilhar externamente**",
+            inline: false,
+          },
+          {
             name: "🏓 `/ping`",
             value: "**Descrição:** Verifica a conectividade e latência do bot\n" +
                    "**Uso:** Digite `/ping` para testar a conexão",
@@ -1478,7 +1671,7 @@ client.on("interactionCreate", async (interaction) => {
             inline: false,
           },
           {
-            name: "✅ **Exemplos Válidos**",
+            name: `${obterEmoji("certo")} **Exemplos Válidos**`,
             value: "• `25/12/2025` - Formato padrão\n" +
                    "• `5/3/25` - Dia e mês com 1 dígito, ano com 2\n" +
                    "• `15/3/25` - Dia com 2 dígitos, mês com 1\n" +
@@ -1487,17 +1680,16 @@ client.on("interactionCreate", async (interaction) => {
             inline: true,
           },
           {
-            name: "❌ **Regras Importantes**",
-            value: "• Marketing: Não aceita datas no passado\n" +
-                   "• Parceria: Aceita datas passadas\n" +
-                   "• CRO: Não aceita datas futuras\n" +
-                   "• Use apenas números e barras `/`\n" +
-                   "• Anos de 2 dígitos assumem 20XX\n" +
-                   "• Validação automática de datas",
+            name: `${obterEmoji("warn")} **Regras Importantes**`,
+            value: "• /marketing: Não aceita datas no passado\n" +
+                   "• /parceria: Aceita datas passadas\n" +
+                   "• /cro: Não aceita datas futuras\n" +
+                   "• Use apenas números e barras `/` em datas\n" +
+                   "• Anos de 2 dígitos assumem 20XX\n",
             inline: true,
           },
           {
-            name: "🌐 **ANÁLISE DE PERFORMANCE (/cro)**",
+            name: `${obterEmoji("planeta")} **ANÁLISE DE PERFORMANCE (/cro)**`,
             value: "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
             inline: false,
           },
@@ -1511,25 +1703,6 @@ client.on("interactionCreate", async (interaction) => {
                    "• **Envios de Formulário** - Submissões de formulários\n" +
                    "• **Dados Consolidados** - Estatísticas de todo o site\n" +
                    "• **Top 5 Sistemas Operacionais** - Ranking ordenado por sessões",
-            inline: false,
-          },
-          {
-            name: "🔗 **RECURSOS ADICIONAIS**",
-            value: "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-            inline: false,
-          },
-          {
-            name: "⚡ **Funcionalidades**",
-            value: "• Integração automática com sistema de tarefas\n" +
-                   "• Link direto para tarefas/cards criados\n" +
-                   "• Validação inteligente de dados e URLs\n" +
-                   "• Confirmação visual com embed\n" +
-                   "• Registro de quem solicitou/registrou\n" +
-                   "• Alertas automáticos nos canais específicos\n" +
-                   "• Dados em tempo real do Microsoft Clarity\n" +
-                   "• Análise consolidada ou por página específica\n" +
-                   "• Ranking ordenado de sistemas operacionais (Top 5)\n" +
-                   "• **Sistema de retry automático** - Tenta novamente em caso de instabilidade temporária",
             inline: false,
           }
         ],
@@ -1601,3 +1774,4 @@ process.on("SIGTERM", () => {
 
 // Conecta o bot ao Discord
 client.login(process.env.BOT_TOKEN)
+          
