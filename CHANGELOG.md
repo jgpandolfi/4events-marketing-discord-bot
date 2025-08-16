@@ -9,6 +9,19 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 ### Em Desenvolvimento
 - Funcionalidades futuras serão listadas aqui
 
+## [1.0.7] - 2025-08-16
+
+### 🔧 Modificado
+- **Migração para MessageFlags**: Atualizada a implementação de mensagens ephemeral para usar a nova API `MessageFlags.Ephemeral`
+  - Substituída a propriedade `ephemeral: true` pela nova implementação `flags: MessageFlags.Ephemeral`
+  - Consistência com as APIs mais recentes do Discord.js v14
+
+- **Comando slash /ping**: Passa a ter uma resposta de visibilidade pública (não ephemeral)
+
+### 📚 Técnico
+- **Discord.js API**: Alinhamento com as melhores práticas e recomendações da versão 14.x do Discord.js
+- **Compatibilidade**: Preparação para futuras atualizações da biblioteca Discord.js
+
 ## [1.0.6] - 2025-08-16
 
 ### ✨ Adicionado

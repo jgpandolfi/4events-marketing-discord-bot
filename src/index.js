@@ -2,6 +2,7 @@ import {
   Client,
   GatewayIntentBits,
   SlashCommandBuilder,
+  MessageFlags,
 } from "discord.js"
 import dotenv from "dotenv"
 import fetch from "node-fetch"
@@ -931,16 +932,16 @@ client.on("interactionCreate", async (interaction) => {
       // Valida os dados de entrada
       if (!nomeDemanda || nomeDemanda.trim().length === 0) {
         await interaction.reply({
-          content: "❌ O nome da tarefa não pode estar vazio!",
-          ephemeral: true,
+          content: `${obterEmoji("errado")} O nome da tarefa não pode estar vazio!`,
+          flags: MessageFlags.Ephemeral,
         })
         return
       }
 
       if (!detalhesDemanda || detalhesDemanda.trim().length === 0) {
         await interaction.reply({
-          content: "❌ Os detalhes da tarefa não podem estar vazios!",
-          ephemeral: true,
+          content: `${obterEmoji("errado")} Os detalhes da tarefa não podem estar vazios!`,
+          flags: MessageFlags.Ephemeral,
         })
         return
       }
@@ -949,8 +950,8 @@ client.on("interactionCreate", async (interaction) => {
       const validacaoData = validarEFormatarData(prazoInput)
       if (!validacaoData.valido) {
         await interaction.reply({
-          content: `❌ **Erro na data:** ${validacaoData.erro}`,
-          ephemeral: true,
+          content: `${obterEmoji("errado")} **Erro na data:** ${validacaoData.erro}`,
+          flags: MessageFlags.Ephemeral,
         })
         return
       }
@@ -961,8 +962,8 @@ client.on("interactionCreate", async (interaction) => {
       
       if (validacaoData.dataObj < hoje) {
         await interaction.reply({
-          content: "❌ **Erro na data:** A data não pode ser no passado",
-          ephemeral: true,
+          content: `${obterEmoji("errado")} **Erro na data:** A data não pode ser no passado`,
+          flags: MessageFlags.Ephemeral,
         })
         return
       }
@@ -1097,8 +1098,8 @@ client.on("interactionCreate", async (interaction) => {
       const validacaoURL = validarURL(urlDoCard)
       if (!validacaoURL.valido) {
         await interaction.reply({
-          content: `❌ **Erro na URL:** ${validacaoURL.erro}`,
-          ephemeral: true,
+          content: `${obterEmoji("errado")} **Erro na URL:** ${validacaoURL.erro}`,
+          flags: MessageFlags.Ephemeral,
         })
         return
       }
@@ -1107,8 +1108,8 @@ client.on("interactionCreate", async (interaction) => {
       const validacaoData = validarEFormatarData(dataDoEvento)
       if (!validacaoData.valido) {
         await interaction.reply({
-          content: `❌ **Erro na data:** ${validacaoData.erro}`,
-          ephemeral: true,
+          content: `${obterEmoji("errado")} **Erro na data:** ${validacaoData.erro}`,
+          flags: MessageFlags.Ephemeral,
         })
         return
       }
@@ -1205,7 +1206,7 @@ client.on("interactionCreate", async (interaction) => {
         const isServerError = resultado.error?.includes('500') || 
                              resultado.error?.includes('Internal Server Error')
         
-        let errorMessage = `❌ **Erro ao registrar parceria**\n\`\`\`${resultado.error}\`\`\``
+        let errorMessage = `${obterEmoji("errado")} **Erro ao registrar parceria**\n\`\`\`${resultado.error}\`\`\``
         
         if (isServerError) {
           errorMessage += `\n\n💡 **Este parece ser um erro temporário do servidor.**\n` +
@@ -1234,8 +1235,8 @@ client.on("interactionCreate", async (interaction) => {
         const validacaoData = validarEFormatarData(dataDesejada)
         if (!validacaoData.valido) {
           await interaction.reply({
-            content: `❌ **Erro na data:** ${validacaoData.erro}`,
-            ephemeral: true,
+            content: `${obterEmoji("errado")} **Erro na data:** ${validacaoData.erro}`,
+            flags: MessageFlags.Ephemeral,
           })
           return
         }
@@ -1250,8 +1251,8 @@ client.on("interactionCreate", async (interaction) => {
         // Se a data é futura, não é possível consultar
         if (dataConsulta > hoje) {
           await interaction.reply({
-            content: "❌ **Erro na data:** Não é possível consultar dados de datas futuras",
-            ephemeral: true,
+            content: `${obterEmoji("errado")} **Erro na data:** Não é possível consultar dados de datas futuras`,
+            flags: MessageFlags.Ephemeral,
           })
           return
         }
@@ -1458,7 +1459,6 @@ client.on("interactionCreate", async (interaction) => {
 
       await interaction.reply({
         embeds: [embed],
-        ephemeral: false,
       })
 
       // Prepara dados do usuário para log
@@ -1502,7 +1502,6 @@ client.on("interactionCreate", async (interaction) => {
 
       await interaction.reply({
         embeds: [embed],
-        ephemeral: false,
       })
 
       // Prepara dados do usuário para log
@@ -1548,7 +1547,6 @@ client.on("interactionCreate", async (interaction) => {
 
       await interaction.reply({
         embeds: [embed],
-        ephemeral: false,
       })
 
       // Prepara dados do usuário para log
@@ -1592,7 +1590,6 @@ client.on("interactionCreate", async (interaction) => {
           },
           timestamp: new Date().toISOString(),
         }],
-        ephemeral: true,
       })
     }
 
@@ -1602,7 +1599,7 @@ client.on("interactionCreate", async (interaction) => {
 
       await interaction.reply({
         content: mensagem,
-        ephemeral: false,
+        flags: MessageFlags.Ephemeral,
       })
 
       // Prepara dados do usuário para log
@@ -1623,7 +1620,7 @@ client.on("interactionCreate", async (interaction) => {
 
       await interaction.reply({
         content: mensagem,
-        ephemeral: false,
+        flags: MessageFlags.Ephemeral,
       })
 
       // Prepara dados do usuário para log
@@ -1779,21 +1776,21 @@ client.on("interactionCreate", async (interaction) => {
 
       await interaction.reply({
         embeds: [embed],
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       })
     }
 
   } catch (error) {
     console.error(`❌ Erro ao processar comando ${interaction.commandName}:`, error.message)
     
-    const errorMessage = "❌ Ocorreu um erro interno. Tente novamente ou contate o suporte."
+    const errorMessage = `${obterEmoji("errado")} Ocorreu um erro interno. Tente novamente ou contate o suporte.`
     
     if (interaction.replied) {
       await interaction.editReply(errorMessage)
     } else {
       await interaction.reply({
         content: errorMessage,
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       })
     }
   }

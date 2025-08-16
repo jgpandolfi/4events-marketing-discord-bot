@@ -136,5 +136,5 @@ Bot criado para otimizar o fluxo de trabalho da equipe de marketing da 4.events.
 ---
 
 **Status**: ✅ Ativo e funcionando  
-**Versão**: 1.0.6
+**Versão**: 1.0.7
 **Última atualização**: Agosto 2025
