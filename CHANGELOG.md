@@ -9,6 +9,18 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 ### Em Desenvolvimento
 - Funcionalidades futuras serão listadas aqui
 
+## [1.0.6] - 2025-08-16
+
+### ✨ Adicionado
+- **Comando `/capa-linkedin`**: Novo comando para disponibilizar a imagem de capa do time 4.events para perfil do LinkedIn dos colaboradores
+  
+- **Comando `/fundo-escritorio`**: Novo comando para disponibilizar a imagem oficial de fundo do escritório para webcam em reuniões, ideal para home office
+
+### 🔧 Modificado
+- **Comando `/help`**: Atualizado para incluir documentação completa dos dois novos comandos
+  - Adicionadas instruções de uso para `/capa-linkedin` e `/fundo-escritorio`
+  - Incluídas descrições das funcionalidades de cada comando
+
 ## [1.0.5] - 2025-08-15
 
 ### ✨ Adicionado

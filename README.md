@@ -15,6 +15,8 @@ Bot desenvolvido para automatizar e facilitar os processo de solicitação de ta
 - **Comando `/midiakit`**: Acessa o mídia kit oficial da 4.events com logos, ícones e materiais audiovisuais
 - **Comando `/apresentações`**: Acessa apresentações comerciais oficiais em PDF e editáveis online (uso interno)
 - **Comando `/modelos`**: Acessa modelos de documentos e templates com branding da 4.events (uso interno)
+- **Comando `/capa-linkedin`**: Acessa a capa oficial da 4.events para LinkedIn dos colaboradores
+- **Comando `/fundo-escritorio`**: Acessa o papel de parede oficial da 4.events para área de trabalho
 - **Comando `/ping`**: Verifica conectividade e status do bot
 - **Comando `/help`**: Exibe ajuda completa dos comandos
 - **Validação inteligente de datas**: Aceita múltiplos formatos (DD/MM/AAAA, D/M/AA, etc.)
@@ -43,6 +45,12 @@ Bot desenvolvido para automatizar e facilitar os processo de solicitação de ta
 ### Acessando Modelos de Documentos (Uso Interno)
 `/modelos`
 
+### Acessando Capa para LinkedIn
+`/capa-linkedin`
+
+### Acessando Fundo de Escritório para Webcam
+`/fundo-escritorio`
+
 ### Verificando Status do Bot
 `/ping`
 
@@ -59,6 +67,8 @@ Bot desenvolvido para automatizar e facilitar os processo de solicitação de ta
 | `/midiakit` | Acessa mídia kit oficial | Nenhum |
 | `/apresentações` | Acessa apresentações comerciais | Nenhum |
 | `/modelos` | Acessa modelos de documentos | Nenhum |
+| `/capa-linkedin` | Acessa capa para LinkedIn | Nenhum |
+| `/fundo-escritorio` | Acessa fundo para webcam | Nenhum |
 | `/ping` | Verifica status do bot | Nenhum |
 | `/help` | Exibe ajuda dos comandos | Nenhum |
 
@@ -126,5 +136,5 @@ Bot criado para otimizar o fluxo de trabalho da equipe de marketing da 4.events.
 ---
 
 **Status**: ✅ Ativo e funcionando  
-**Versão**: 1.0.5
+**Versão**: 1.0.6
 **Última atualização**: Agosto 2025

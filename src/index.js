@@ -263,6 +263,16 @@ const cmdModelos = new SlashCommandBuilder()
   .setName("modelos")
   .setDescription("📄 Acessa os modelos de documentos e templates com branding da 4.events")
 
+// Define o comando slash /capa-linkedin
+const cmdCapaLinkedin = new SlashCommandBuilder()
+  .setName("capa-linkedin")
+  .setDescription("🖼️ Acessa a capa oficial da 4.events para LinkedIn dos colaboradores")
+
+// Define o comando slash /fundo-escritorio
+const cmdFundoEscritorio = new SlashCommandBuilder()
+  .setName("fundo-escritorio")
+  .setDescription("🖥️ Acessa o papel de parede oficial da 4.events para área de trabalho")
+
 // Define o comando /ping para teste
 const cmdPing = new SlashCommandBuilder()
   .setName("ping")
@@ -892,6 +902,8 @@ client.once("ready", async () => {
       cmdMidiaKit,
       cmdApresentacoes,
       cmdModelos,
+      cmdCapaLinkedin,
+      cmdFundoEscritorio,
       cmdPing,
       cmdHelp,
     ])
@@ -1446,7 +1458,7 @@ client.on("interactionCreate", async (interaction) => {
 
       await interaction.reply({
         embeds: [embed],
-        ephemeral: false, // Torna a resposta visível para todos
+        ephemeral: false,
       })
 
       // Prepara dados do usuário para log
@@ -1490,7 +1502,7 @@ client.on("interactionCreate", async (interaction) => {
 
       await interaction.reply({
         embeds: [embed],
-        ephemeral: false, // Torna a resposta visível para todos
+        ephemeral: false,
       })
 
       // Prepara dados do usuário para log
@@ -1536,7 +1548,7 @@ client.on("interactionCreate", async (interaction) => {
 
       await interaction.reply({
         embeds: [embed],
-        ephemeral: false, // Torna a resposta visível para todos
+        ephemeral: false,
       })
 
       // Prepara dados do usuário para log
@@ -1582,6 +1594,47 @@ client.on("interactionCreate", async (interaction) => {
         }],
         ephemeral: true,
       })
+    }
+
+    // Comando /capa-linkedin
+    else if (interaction.commandName === "capa-linkedin") {
+      const mensagem = `https://agenciam2a.com.br/externo/4events-Capa-LinkedIn-Pessoal-Time.png`
+
+      await interaction.reply({
+        content: mensagem,
+        ephemeral: false,
+      })
+
+      // Prepara dados do usuário para log
+      const usuario = {
+        username: interaction.user.username,
+        displayName: interaction.member?.displayName || interaction.user.username,
+        id: interaction.user.id,
+        tag: interaction.user.tag,
+      }
+
+      console.log(`✅ Capa LinkedIn acessada por ${usuario.displayName}`)
+    }
+
+    // Comando /fundo-escritorio
+    else if (interaction.commandName === "fundo-escritorio") {
+
+      const mensagem = `https://agenciam2a.com.br/externo/4events-fundo-escritorio.png`
+
+      await interaction.reply({
+        content: mensagem,
+        ephemeral: false,
+      })
+
+      // Prepara dados do usuário para log
+      const usuario = {
+        username: interaction.user.username,
+        displayName: interaction.member?.displayName || interaction.user.username,
+        id: interaction.user.id,
+        tag: interaction.user.tag,
+      }
+
+      console.log(`✅ Fundo de escritório acessado por ${usuario.displayName}`)
     }
 
     // Comando /help
@@ -1651,6 +1704,18 @@ client.on("interactionCreate", async (interaction) => {
                    "**Uso:** Digite `/modelos` para acessar templates de documentos\n" +
                    "**Conteúdo:** Documentos timbrados, contratos, propostas e relatórios\n" +
                    "**⚠️ Uso interno exclusivo - não compartilhar externamente**",
+            inline: false,
+          },
+                    {
+            name: "🖼️ `/capa-linkedin`",
+            value: "**Descrição:** Acessa a capa oficial da 4.events para LinkedIn dos colaboradores\n" +
+                   "**Uso:** Digite `/capa-linkedin` para acessar o link da imagem\n",
+            inline: false,
+          },
+          {
+            name: "🖥️ `/fundo-escritorio`",
+            value: "**Descrição:** Acessa o papel de parede oficial da 4.events para área de trabalho\n" +
+                   "**Uso:** Digite `/fundo-escritorio` para acessar o link da imagem\n",
             inline: false,
           },
           {
