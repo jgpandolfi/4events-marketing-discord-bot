@@ -9,6 +9,26 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 ### Em Desenvolvimento
 - Funcionalidades futuras serão listadas aqui
 
+## [1.0.8] - 2025-08-16
+
+### ✨ Adicionado
+- **Sistema de Modals para Comandos Principais**: Implementados formulários popup (modals) para os comandos `/marketing` e `/parceria`
+  - **Interface mais intuitiva**: Usuários preenchem formulários estruturados em vez de parâmetros diretos
+  - **Campos de texto multilinha**: Suporte a descrições mais detalhadas com `TextInputStyle.Paragraph`
+  - **Validação visual aprimorada**: Placeholders explicativos e organização melhor dos campos
+
+### 🔧 Modificado
+- **Comando `/marketing`**: Removidos parâmetros diretos, implementado modal com 3 campos estruturados
+  - Campo "Nome/Título da Tarefa" com limite de 100 caracteres
+  - Campo "Detalhes e Descrição" em formato de parágrafo com limite de 1000 caracteres  
+  - Campo "Data Limite" com formato DD/MM/AAAA e placeholder explicativo
+- **Comando `/parceria`**: Removidos parâmetros diretos, implementado modal com 2 campos estruturados
+  - Campo "URL do Card no Sistema" com limite de 500 caracteres
+  - Campo "Data do Evento" com formato DD/MM/AAAA e placeholder explicativo
+- **Comando `/help`**: Atualizado para documentar o novo fluxo de uso dos comandos com modals
+- **Event Handler**: Reestruturado o evento `interactionCreate` para processar modals antes de comandos
+- **Imports Discord.js**: Adicionados imports necessários para modals (`ModalBuilder`, `TextInputBuilder`, `TextInputStyle`, `ActionRowBuilder`)
+
 ## [1.0.7] - 2025-08-16
 
 ### 🔧 Modificado

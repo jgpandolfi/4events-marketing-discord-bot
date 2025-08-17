@@ -3,6 +3,10 @@ import {
   GatewayIntentBits,
   SlashCommandBuilder,
   MessageFlags,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
+  ActionRowBuilder
 } from "discord.js"
 import dotenv from "dotenv"
 import fetch from "node-fetch"
@@ -189,46 +193,11 @@ function obterEmoji(nomeEmoji) {
 const cmdMarketing = new SlashCommandBuilder()
   .setName("marketing")
   .setDescription("📋 Cria uma nova solicitação de tarefa de marketing")
-  .addStringOption((option) =>
-    option
-      .setName("nome_demanda")
-      .setDescription("Nome/título da tarefa de marketing")
-      .setRequired(true)
-      .setMaxLength(100)
-  )
-  .addStringOption((option) =>
-    option
-      .setName("detalhes_demanda")
-      .setDescription("Detalhes e descrição da tarefa")
-      .setRequired(true)
-      .setMaxLength(1000)
-  )
-  .addStringOption((option) =>
-    option
-      .setName("prazo")
-      .setDescription("Data limite para conclusão (formato: DD/MM/AAAA)")
-      .setRequired(true)
-      .setMaxLength(10)
-  )
 
 // Define o comando slash /parceria
 const cmdParceria = new SlashCommandBuilder()
   .setName("parceria")
   .setDescription("🤝 Registra uma nova parceria comercial")
-  .addStringOption((option) =>
-    option
-      .setName("url_do_card")
-      .setDescription("URL do card no sistema (ex: https://app.pipe.run/...)")
-      .setRequired(true)
-      .setMaxLength(500)
-  )
-  .addStringOption((option) =>
-    option
-      .setName("data_do_evento")
-      .setDescription("Data do evento (formato: DD/MM/AAAA)")
-      .setRequired(true)
-      .setMaxLength(10)
-  )
 
 // Define o comando slash /cro
 const cmdCro = new SlashCommandBuilder()
@@ -920,305 +889,394 @@ client.once("ready", async () => {
 
 // Evento: Processar interações (comandos slash)
 client.on("interactionCreate", async (interaction) => {
-  if (!interaction.isCommand()) return
-
   try {
+        // Handler de Modals - Processar submissão de modals (comandos /marketing e /parceria)
+    if (interaction.isModalSubmit()) {
+      
+      // Modal de Marketing (criado pelo comando /marketing)
+      if (interaction.customId === 'marketing_modal') {
+        // Obter dados do modal
+        const nomeDemanda = interaction.fields.getTextInputValue('nome_demanda')
+        const detalhesDemanda = interaction.fields.getTextInputValue('detalhes_demanda')
+        const prazoInput = interaction.fields.getTextInputValue('prazo')
+        
+        // Usar a mesma lógica de validação que já existe
+        // Valida os dados de entrada
+        if (!nomeDemanda || nomeDemanda.trim().length === 0) {
+          await interaction.reply({
+            content: `${obterEmoji("errado")} O nome da tarefa não pode estar vazio!`,
+            flags: MessageFlags.Ephemeral,
+          })
+          return
+        }
+
+        if (!detalhesDemanda || detalhesDemanda.trim().length === 0) {
+          await interaction.reply({
+            content: `${obterEmoji("errado")} Os detalhes da tarefa não podem estar vazios!`,
+            flags: MessageFlags.Ephemeral,
+          })
+          return
+        }
+
+        // Valida a data do prazo
+        const validacaoData = validarEFormatarData(prazoInput)
+        if (!validacaoData.valido) {
+          await interaction.reply({
+            content: `${obterEmoji("errado")} **Erro na data:** ${validacaoData.erro}`,
+            flags: MessageFlags.Ephemeral,
+          })
+          return
+        }
+
+        // Verifica se a data não é no passado para marketing
+        const hoje = new Date()
+        hoje.setHours(0, 0, 0, 0)
+        
+        if (validacaoData.dataObj < hoje) {
+          await interaction.reply({
+            content: `${obterEmoji("errado")} **Erro na data:** A data não pode ser no passado`,
+            flags: MessageFlags.Ephemeral,
+          })
+          return
+        }
+
+        // Resposta inicial (primeira tentativa - mensagem normal)
+        const loadingEmoji = obterEmoji("loading")
+        await interaction.reply(`${loadingEmoji} Criando solicitação de tarefa para o marketing...`)
+
+        // Prepara dados do usuário
+        const usuario = {
+          username: interaction.user.username,
+          displayName: interaction.member?.displayName || interaction.user.username,
+          id: interaction.user.id,
+          tag: interaction.user.tag,
+        }
+
+        // Prepara dados do prazo
+        const dadosPrazo = {
+          dataFormatada: validacaoData.dataFormatada,
+          dataISO: validacaoData.iso
+        }
+
+        // Envia para o N8N com retry e feedback visual
+        const resultado = await executarComRetryComFeedback(
+          interaction,
+          enviarParaN8N,
+          [nomeDemanda.trim(), detalhesDemanda.trim(), dadosPrazo, usuario],
+          "solicitação de marketing"
+        )
+
+        if (resultado.success) {
+          // Captura a URL da tarefa se disponível
+          let taskUrl = null
+          if (resultado.data) {
+            // Se for um array, pega o primeiro elemento
+            if (Array.isArray(resultado.data) && resultado.data.length > 0) {
+              taskUrl = resultado.data[0].url || 
+                        resultado.data.taskUrl || 
+                        resultado.data.cardUrl
+            } else if (typeof resultado.data === 'object') {
+              // Se for um objeto simples
+              taskUrl = resultado.data.url || 
+                        resultado.data.taskUrl || 
+                        resultado.data.cardUrl
+            }
+          }
+
+          // Prepara os campos do embed de resposta ao usuário
+          const embedFields = [
+            {
+              name: `${obterEmoji("info")} Nome da tarefa`,
+              value: `\`\`\`${truncarTexto(nomeDemanda, 500)}\`\`\``,
+              inline: false,
+            },
+            {
+              name: `${obterEmoji("pasta")} Detalhes`,
+              value: `\`${truncarTexto(detalhesDemanda, 800)}\``,
+              inline: false,
+            },
+            {
+              name: `${obterEmoji("relogio")} Prazo`,
+              value: `\`${validacaoData.dataFormatada}\``,
+              inline: true,
+            },
+            {
+              name: `${obterEmoji("equipe")} Solicitado por`,
+              value: `${usuario.displayName} (${usuario.tag})`,
+              inline: true,
+            },
+            {
+              name: `${obterEmoji("relogio2")} Criado em`,
+              value: formatarDataHora(),
+              inline: true,
+            }
+          ]
+
+          // Adiciona URL da tarefa no embed de resposta se disponível
+          if (taskUrl) {
+            embedFields.push({
+              name: `${obterEmoji("planeta")} Link da Tarefa`,
+              value: `[Clique aqui para acessar a tarefa](${taskUrl})`,
+              inline: false,
+            })
+          }
+
+          // Sucesso - edita a resposta para o usuário
+          const embed = {
+            color: 0x00ff00,
+            title: `${obterEmoji("certo")} Solicitação criada com sucesso!`,
+            fields: embedFields,
+            footer: {
+              text: "4.events Marketing Bot",
+            },
+            timestamp: new Date().toISOString(),
+          }
+
+          await interaction.editReply({
+            content: "",
+            embeds: [embed],
+          })
+
+          // Envia alerta no canal de marketing
+          await enviarAlertaCanal(nomeDemanda, detalhesDemanda, validacaoData, usuario, taskUrl)
+          console.log(`✅ Solicitação criada por ${usuario.displayName}: "${nomeDemanda}" - Prazo: ${validacaoData.dataFormatada}`)
+
+        } else {
+          // Mensagem de erro melhorada
+          const isServerError = resultado.error?.includes('500') || 
+                              resultado.error?.includes('Internal Server Error')
+          
+          let errorMessage = `${obterEmoji("errado")} **Erro ao criar solicitação**\n\`\`\`${resultado.error}\`\`\``
+          
+          if (isServerError) {
+            errorMessage += `\n\n${obterEmoji("ideiadev")} **Este parece ser um erro temporário do servidor.**\n` +
+                          `O bot tentou ${RETRY_CONFIG.maxTentativas} vezes antes de desistir.\n` +
+                          `**Sugestão:** Tente novamente em alguns minutos ou entre em contato com o suporte.`
+          } else {
+            errorMessage += `\n\n**Tente novamente ou entre em contato com o suporte.**`
+          }
+
+          await interaction.editReply({ content: errorMessage })
+          console.error(`❌ Falha ao criar solicitação para ${usuario.displayName}: ${resultado.error}`)
+        }
+      }
+      
+      // Modal de Parceria (criado pelo comando /parceria)
+      else if (interaction.customId === 'parceria_modal') {
+        // Obter dados do modal
+        const urlDoCard = interaction.fields.getTextInputValue('url_do_card')
+        const dataDoEvento = interaction.fields.getTextInputValue('data_do_evento')
+        
+        // Valida a URL
+        const validacaoURL = validarURL(urlDoCard)
+        if (!validacaoURL.valido) {
+          await interaction.reply({
+            content: `${obterEmoji("errado")} **Erro na URL:** ${validacaoURL.erro}`,
+            flags: MessageFlags.Ephemeral,
+          })
+          return
+        }
+
+        // Valida a data do evento
+        const validacaoData = validarEFormatarData(dataDoEvento)
+        if (!validacaoData.valido) {
+          await interaction.reply({
+            content: `${obterEmoji("errado")} **Erro na data:** ${validacaoData.erro}`,
+            flags: MessageFlags.Ephemeral,
+          })
+          return
+        }
+
+        // Resposta inicial (primeira tentativa - mensagem normal)
+        const loadingEmoji = obterEmoji("loading")
+        await interaction.reply(`${loadingEmoji} Registrando parceria comercial...`)
+
+        // Prepara dados do usuário
+        const usuario = {
+          username: interaction.user.username,
+          displayName: interaction.member?.displayName || interaction.user.username,
+          id: interaction.user.id,
+          tag: interaction.user.tag,
+        }
+
+        // Prepara dados do evento
+        const dadosEvento = {
+          dataFormatada: validacaoData.dataFormatada,
+          dataISO: validacaoData.iso
+        }
+
+        // Envia para o N8N com retry e feedback visual
+        const resultado = await executarComRetryComFeedback(
+          interaction,
+          enviarParceriaParaN8N,
+          [validacaoURL.url, dadosEvento, usuario],
+          "registro de parceria"
+        )
+
+        if (resultado.success) {
+          // Captura o nome do card se disponível
+          let nomeCard = null
+          if (resultado.data && Array.isArray(resultado.data) && resultado.data.length > 0) {
+            nomeCard = resultado.data.name
+          }
+
+          // Prepara os campos do embed de resposta ao usuário
+          const embedFields = [
+            {
+              name: `${obterEmoji("planeta")} URL do Card`,
+              value: `[Clique aqui para acessar](${validacaoURL.url})`,
+              inline: false,
+            },
+            {
+              name: `${obterEmoji("relogio")} Data do Evento`,
+              value: `\`${validacaoData.dataFormatada}\``,
+              inline: true,
+            },
+            {
+              name: `${obterEmoji("equipe")} Registrado por`,
+              value: `${usuario.displayName} (${usuario.tag})`,
+              inline: true,
+            },
+            {
+              name: `${obterEmoji("relogio2")} Registrado em`,
+              value: formatarDataHora(),
+              inline: true,
+            }
+          ]
+
+          // Adiciona nome do card se disponível
+          if (nomeCard) {
+            embedFields.unshift({
+              name: `${obterEmoji("info")} Nome do Card`,
+              value: `\`\`\`${nomeCard}\`\`\``,
+              inline: false,
+            })
+          }
+
+          // Sucesso - edita a resposta para o usuário
+          const embed = {
+            color: 0x00ff00,
+            title: `${obterEmoji("certo")} Parceria registrada com sucesso!`,
+            fields: embedFields,
+            footer: {
+              text: "4.events Marketing Bot",
+            },
+            timestamp: new Date().toISOString(),
+          }
+
+          await interaction.editReply({
+            content: "",
+            embeds: [embed],
+          })
+
+          // Envia notificação no canal de parceria
+          await enviarNotificacaParceria(validacaoURL.url, dadosEvento, usuario, nomeCard)
+
+          console.log(`✅ Parceria registrada por ${usuario.displayName}: "${nomeCard || 'Card não identificado'}" - Data: ${validacaoData.dataFormatada}`)
+
+        } else {
+          // Mensagem de erro melhorada
+          const isServerError = resultado.error?.includes('500') || 
+                              resultado.error?.includes('Internal Server Error')
+          
+          let errorMessage = `${obterEmoji("errado")} **Erro ao registrar parceria**\n\`\`\`${resultado.error}\`\`\``
+          
+          if (isServerError) {
+            errorMessage += `\n\n${obterEmoji("ideiadev")} **Este parece ser um erro temporário do servidor.**\n` +
+                          `O bot tentou ${RETRY_CONFIG.maxTentativas} vezes antes de desistir.\n` +
+                          `**Sugestão:** Tente novamente em alguns minutos ou entre em contato com o suporte.`
+          } else {
+            errorMessage += `\n\n**Tente novamente ou entre em contato com o suporte.**`
+          }
+
+          await interaction.editReply({ content: errorMessage })
+          console.error(`❌ Falha ao registrar parceria para ${usuario.displayName}: ${resultado.error}`)
+        }
+      }
+    }
+
+    if (!interaction.isCommand()) return
+
     // Comando /marketing
     if (interaction.commandName === "marketing") {
-      const nomeDemanda = interaction.options.getString("nome_demanda")
-      const detalhesDemanda = interaction.options.getString("detalhes_demanda")
-      const prazoInput = interaction.options.getString("prazo")
-      
-      // Valida os dados de entrada
-      if (!nomeDemanda || nomeDemanda.trim().length === 0) {
-        await interaction.reply({
-          content: `${obterEmoji("errado")} O nome da tarefa não pode estar vazio!`,
-          flags: MessageFlags.Ephemeral,
-        })
-        return
-      }
+      // Criar o modal
+      const modal = new ModalBuilder()
+        .setCustomId('marketing_modal')
+        .setTitle('📋 Nova Solicitação de Marketing')
 
-      if (!detalhesDemanda || detalhesDemanda.trim().length === 0) {
-        await interaction.reply({
-          content: `${obterEmoji("errado")} Os detalhes da tarefa não podem estar vazios!`,
-          flags: MessageFlags.Ephemeral,
-        })
-        return
-      }
+      // Campo para nome da demanda
+      const nomeInput = new TextInputBuilder()
+        .setCustomId('nome_demanda')
+        .setLabel('Nome/Título da Tarefa')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true)
+        .setMaxLength(100)
+        .setPlaceholder('Ex: Campanha redes sociais para evento X')
 
-      // Valida a data do prazo
-      const validacaoData = validarEFormatarData(prazoInput)
-      if (!validacaoData.valido) {
-        await interaction.reply({
-          content: `${obterEmoji("errado")} **Erro na data:** ${validacaoData.erro}`,
-          flags: MessageFlags.Ephemeral,
-        })
-        return
-      }
+      // Campo para detalhes
+      const detalhesInput = new TextInputBuilder()
+        .setCustomId('detalhes_demanda')
+        .setLabel('Detalhes e Descrição da Tarefa')
+        .setStyle(TextInputStyle.Paragraph)
+        .setRequired(true)
+        .setMaxLength(1000)
+        .setPlaceholder('Descreva os detalhes da tarefa, objetivos, materiais necessários...')
 
-      // Verifica se a data não é no passado para marketing
-      const hoje = new Date()
-      hoje.setHours(0, 0, 0, 0)
-      
-      if (validacaoData.dataObj < hoje) {
-        await interaction.reply({
-          content: `${obterEmoji("errado")} **Erro na data:** A data não pode ser no passado`,
-          flags: MessageFlags.Ephemeral,
-        })
-        return
-      }
+      // Campo para prazo
+      const prazoInput = new TextInputBuilder()
+        .setCustomId('prazo')
+        .setLabel('Data Limite (DD/MM/AAAA)')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true)
+        .setMaxLength(10)
+        .setPlaceholder('25/12/2025')
 
-      // Resposta inicial (primeira tentativa - mensagem normal)
-      const loadingEmoji = obterEmoji("loading")
-      await interaction.reply(`${loadingEmoji} Criando solicitação de tarefa para o marketing...`)
+      // Organizar campos em ActionRows
+      const firstActionRow = new ActionRowBuilder().addComponents(nomeInput)
+      const secondActionRow = new ActionRowBuilder().addComponents(detalhesInput)
+      const thirdActionRow = new ActionRowBuilder().addComponents(prazoInput)
 
-      // Prepara dados do usuário
-      const usuario = {
-        username: interaction.user.username,
-        displayName: interaction.member?.displayName || interaction.user.username,
-        id: interaction.user.id,
-        tag: interaction.user.tag,
-      }
+      // Adicionar campos ao modal
+      modal.addComponents(firstActionRow, secondActionRow, thirdActionRow)
 
-      // Prepara dados do prazo
-      const dadosPrazo = {
-        dataFormatada: validacaoData.dataFormatada,
-        dataISO: validacaoData.iso
-      }
-
-      // Envia para o N8N com retry e feedback visual
-      const resultado = await executarComRetryComFeedback(
-        interaction,
-        enviarParaN8N,
-        [nomeDemanda.trim(), detalhesDemanda.trim(), dadosPrazo, usuario],
-        "solicitação de marketing"
-      )
-
-      if (resultado.success) {
-        // Captura a URL da tarefa se disponível
-        let taskUrl = null
-        if (resultado.data) {
-          // Se for um array, pega o primeiro elemento
-          if (Array.isArray(resultado.data) && resultado.data.length > 0) {
-            taskUrl = resultado.data[0].url || 
-                      resultado.data[0].taskUrl || 
-                      resultado.data[0].cardUrl
-          } else if (typeof resultado.data === 'object') {
-            // Se for um objeto simples
-            taskUrl = resultado.data.url || 
-                      resultado.data.taskUrl || 
-                      resultado.data.cardUrl
-          }
-        }
-
-        // Prepara os campos do embed de resposta ao usuário
-        const embedFields = [
-          {
-            name: `${obterEmoji("info")} Nome da tarefa`,
-            value: `\`\`\`${truncarTexto(nomeDemanda, 500)}\`\`\``,
-            inline: false,
-          },
-          {
-            name: `${obterEmoji("pasta")} Detalhes`,
-            value: `\`${truncarTexto(detalhesDemanda, 800)}\``,
-            inline: false,
-          },
-          {
-            name: `${obterEmoji("relogio")} Prazo`,
-            value: `\`${validacaoData.dataFormatada}\``,
-            inline: true,
-          },
-          {
-            name: `${obterEmoji("equipe")} Solicitado por`,
-            value: `${usuario.displayName} (${usuario.tag})`,
-            inline: true,
-          },
-          {
-            name: `${obterEmoji("relogio2")} Criado em`,
-            value: formatarDataHora(),
-            inline: true,
-          }
-        ]
-
-        // Adiciona URL da tarefa no embed de resposta se disponível
-        if (taskUrl) {
-          embedFields.push({
-            name: `${obterEmoji("planeta")} Link da Tarefa`,
-            value: `[Clique aqui para acessar a tarefa](${taskUrl})`,
-            inline: false,
-          })
-        }
-
-        // Sucesso - edita a resposta para o usuário
-        const embed = {
-          color: 0x00ff00,
-          title: `${obterEmoji("certo")} Solicitação criada com sucesso!`,
-          fields: embedFields,
-          footer: {
-            text: "4.events Marketing Bot",
-          },
-          timestamp: new Date().toISOString(),
-        }
-
-        await interaction.editReply({
-          content: "",
-          embeds: [embed],
-        })
-
-        // Envia alerta no canal de marketing
-        await enviarAlertaCanal(nomeDemanda, detalhesDemanda, validacaoData, usuario, taskUrl)
-        console.log(`✅ Solicitação criada por ${usuario.displayName}: "${nomeDemanda}" - Prazo: ${validacaoData.dataFormatada}`)
-
-      } else {
-        // Mensagem de erro melhorada
-        const isServerError = resultado.error?.includes('500') || 
-                             resultado.error?.includes('Internal Server Error')
-        
-        let errorMessage = `❌ **Erro ao criar solicitação**\n\`\`\`${resultado.error}\`\`\``
-        
-        if (isServerError) {
-          errorMessage += `\n\n💡 **Este parece ser um erro temporário do servidor.**\n` +
-                         `O bot tentou ${RETRY_CONFIG.maxTentativas} vezes antes de desistir.\n` +
-                         `**Sugestão:** Tente novamente em alguns minutos ou entre em contato com o suporte.`
-        } else {
-          errorMessage += `\n\n**Tente novamente ou entre em contato com o suporte.**`
-        }
-
-        await interaction.editReply({ content: errorMessage })
-        console.error(`❌ Falha ao criar solicitação para ${usuario.displayName}: ${resultado.error}`)
-      }
+      // Exibir o modal
+      await interaction.showModal(modal)
     }
 
     // Comando /parceria
     else if (interaction.commandName === "parceria") {
-      const urlDoCard = interaction.options.getString("url_do_card")
-      const dataDoEvento = interaction.options.getString("data_do_evento")
-      
-      // Valida a URL
-      const validacaoURL = validarURL(urlDoCard)
-      if (!validacaoURL.valido) {
-        await interaction.reply({
-          content: `${obterEmoji("errado")} **Erro na URL:** ${validacaoURL.erro}`,
-          flags: MessageFlags.Ephemeral,
-        })
-        return
-      }
+      // Criar o modal
+      const modal = new ModalBuilder()
+        .setCustomId('parceria_modal')
+        .setTitle('🤝 Registrar Nova Parceria')
 
-      // Valida a data do evento
-      const validacaoData = validarEFormatarData(dataDoEvento)
-      if (!validacaoData.valido) {
-        await interaction.reply({
-          content: `${obterEmoji("errado")} **Erro na data:** ${validacaoData.erro}`,
-          flags: MessageFlags.Ephemeral,
-        })
-        return
-      }
+      // Campo para URL do card
+      const urlInput = new TextInputBuilder()
+        .setCustomId('url_do_card')
+        .setLabel('URL do Card no Sistema')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true)
+        .setMaxLength(500)
+        .setPlaceholder('https://app.pipe.run/cards/...')
 
-      // Resposta inicial (primeira tentativa - mensagem normal)
-      const loadingEmoji = obterEmoji("loading")
-      await interaction.reply(`${loadingEmoji} Registrando parceria comercial...`)
+      // Campo para data do evento
+      const dataInput = new TextInputBuilder()
+        .setCustomId('data_do_evento')
+        .setLabel('Data do Evento (DD/MM/AAAA)')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true)
+        .setMaxLength(10)
+        .setPlaceholder('15/06/2025')
 
-      // Prepara dados do usuário
-      const usuario = {
-        username: interaction.user.username,
-        displayName: interaction.member?.displayName || interaction.user.username,
-        id: interaction.user.id,
-        tag: interaction.user.tag,
-      }
+      // Organizar campos em ActionRows
+      const firstActionRow = new ActionRowBuilder().addComponents(urlInput)
+      const secondActionRow = new ActionRowBuilder().addComponents(dataInput)
 
-      // Prepara dados do evento
-      const dadosEvento = {
-        dataFormatada: validacaoData.dataFormatada,
-        dataISO: validacaoData.iso
-      }
+      // Adicionar campos ao modal
+      modal.addComponents(firstActionRow, secondActionRow)
 
-      // Envia para o N8N com retry e feedback visual
-      const resultado = await executarComRetryComFeedback(
-        interaction,
-        enviarParceriaParaN8N,
-        [validacaoURL.url, dadosEvento, usuario],
-        "registro de parceria"
-      )
-
-      if (resultado.success) {
-        // Captura o nome do card se disponível
-        let nomeCard = null
-        if (resultado.data && Array.isArray(resultado.data) && resultado.data.length > 0) {
-          nomeCard = resultado.data[0].name
-        }
-
-        // Prepara os campos do embed de resposta ao usuário
-        const embedFields = [
-          {
-            name: `${obterEmoji("planeta")} URL do Card`,
-            value: `[Clique aqui para acessar](${validacaoURL.url})`,
-            inline: false,
-          },
-          {
-            name: `${obterEmoji("relogio")} Data do Evento`,
-            value: `\`${validacaoData.dataFormatada}\``,
-            inline: true,
-          },
-          {
-            name: `${obterEmoji("equipe")} Registrado por`,
-            value: `${usuario.displayName} (${usuario.tag})`,
-            inline: true,
-          },
-          {
-            name: `${obterEmoji("relogio2")} Registrado em`,
-            value: formatarDataHora(),
-            inline: true,
-          }
-        ]
-
-        // Adiciona nome do card se disponível
-        if (nomeCard) {
-          embedFields.unshift({
-            name: `${obterEmoji("info")} Nome do Card`,
-            value: `\`\`\`${nomeCard}\`\`\``,
-            inline: false,
-          })
-        }
-
-        // Sucesso - edita a resposta para o usuário
-        const embed = {
-          color: 0x00ff00,
-          title: `${obterEmoji("certo")} Parceria registrada com sucesso!`,
-          fields: embedFields,
-          footer: {
-            text: "4.events Marketing Bot",
-          },
-          timestamp: new Date().toISOString(),
-        }
-
-        await interaction.editReply({
-          content: "",
-          embeds: [embed],
-        })
-
-        // Envia notificação no canal de parceria
-        await enviarNotificacaParceria(validacaoURL.url, dadosEvento, usuario, nomeCard)
-
-        console.log(`✅ Parceria registrada por ${usuario.displayName}: "${nomeCard || 'Card não identificado'}" - Data: ${validacaoData.dataFormatada}`)
-
-      } else {
-        // Mensagem de erro melhorada
-        const isServerError = resultado.error?.includes('500') || 
-                             resultado.error?.includes('Internal Server Error')
-        
-        let errorMessage = `${obterEmoji("errado")} **Erro ao registrar parceria**\n\`\`\`${resultado.error}\`\`\``
-        
-        if (isServerError) {
-          errorMessage += `\n\n💡 **Este parece ser um erro temporário do servidor.**\n` +
-                         `O bot tentou ${RETRY_CONFIG.maxTentativas} vezes antes de desistir.\n` +
-                         `**Sugestão:** Tente novamente em alguns minutos ou entre em contato com o suporte.`
-        } else {
-          errorMessage += `\n\n**Tente novamente ou entre em contato com o suporte.**`
-        }
-
-        await interaction.editReply({ content: errorMessage })
-        console.error(`❌ Falha ao registrar parceria para ${usuario.displayName}: ${resultado.error}`)
-      }
+      // Exibir o modal
+      await interaction.showModal(modal)
     }
 
     // Comando /cro
@@ -1644,27 +1702,29 @@ client.on("interactionCreate", async (interaction) => {
                      "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
         fields: [
           {
-            name: "🔧 **COMANDOS DISPONÍVEIS**",
+            name: `${obterEmoji("config")} **COMANDOS DISPONÍVEIS**`,
             value: "` `",
             inline: false,
           },
           {
             name: "📋 `/marketing`",
             value: "**Descrição:** Cria uma nova solicitação de tarefa de marketing\n" +
-                   "**Parâmetros:**\n" +
-                   "• `nome` - Título da tarefa *(máx: 100 caracteres)*\n" +
-                   "• `detalhes` - Descrição detalhada *(máx: 1000 caracteres)*\n" +
-                   "• `prazo` - Data limite no formato **DD/MM/AAAA**\n\n" +
-                   "**Exemplo:** `/marketing nome:Campanha redes sociais detalhes:Criar posts para Instagram prazo:30/12/2025`",
+                  "**Como usar:** Digite `/marketing` e preencha o formulário que será exibido\n" +
+                  "**Campos do formulário:**\n" +
+                  "• **Nome da tarefa** - Título da tarefa *(máx: 100 caracteres)*\n" +
+                  "• **Detalhes** - Descrição detalhada *(máx: 1000 caracteres)*\n" +
+                  "• **Prazo** - Data limite no formato **DD/MM/AAAA**\n\n" +
+                  "**Exemplo:** Digite `/marketing` → Preencha o modal → Envie",
             inline: false,
           },
           {
             name: "🤝 `/parceria`",
             value: "**Descrição:** Registra uma nova parceria comercial\n" +
-                   "**Parâmetros:**\n" +
-                   "• `url_do_card` - URL do card no sistema *(máx: 500 caracteres)*\n" +
-                   "• `data_do_evento` - Data do evento no formato **DD/MM/AAAA**\n\n" +
-                   "**Exemplo:** `/parceria url_do_card:https://app.pipe.run/... data_do_evento:15/08/2025`",
+                  "**Como usar:** Digite `/parceria` e preencha o formulário que será exibido\n" +
+                  "**Campos do formulário:**\n" +
+                  "• **URL do card** - URL do card no sistema *(máx: 500 caracteres)*\n" +
+                  "• **Data do evento** - Data do evento no formato **DD/MM/AAAA**\n\n" +
+                  "**Exemplo:** Digite `/parceria` → Preencha o modal → Envie",
             inline: false,
           },
           {
@@ -1779,6 +1839,7 @@ client.on("interactionCreate", async (interaction) => {
         flags: MessageFlags.Ephemeral,
       })
     }
+
 
   } catch (error) {
     console.error(`❌ Erro ao processar comando ${interaction.commandName}:`, error.message)

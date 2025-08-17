@@ -28,10 +28,10 @@ Bot desenvolvido para automatizar e facilitar os processo de solicitação de ta
 ## 🚀 Como Usar
 
 ### Solicitando uma Tarefa para o Time de Marketing
-`/marketing nome:Campanha Instagram detalhes:Criar 5 posts para o feed prazo:30/12/2025`
+`/marketing` → Preencha o formulário popup → Envie
 
-### Registrando uma Nova Parceria
-`/parceria url_do_card:https://app.pipe.run/cards/exemplo data_do_evento:15/06/2025`
+### Registrando uma Nova Parceria  
+`/parceria` → Preencha o formulário popup → Envie
 
 ### Obtendo Dados de Performance e Estatísticas (CRO)
 `/cro data_desejada:28/07/2025 final_da_url_desejada:credenciamento`
@@ -61,8 +61,8 @@ Bot desenvolvido para automatizar e facilitar os processo de solicitação de ta
 
 | Comando | Descrição | Parâmetros |
 |---------|-----------|------------|
-| `/marketing` | Cria tarefa de marketing | `nome`, `detalhes`, `prazo` |
-| `/parceria` | Registra parceria comercial | `url_do_card`, `data_do_evento` |
+| `/marketing` | Cria tarefa de marketing | **Modal com formulário** |
+| `/parceria` | Registra parceria comercial | **Modal com formulário** |
 | `/cro` | Dados de performance e estatísticas | `data_desejada` (opcional), `final_da_url_desejada` (opcional) |
 | `/midiakit` | Acessa mídia kit oficial | Nenhum |
 | `/apresentações` | Acessa apresentações comerciais | Nenhum |
@@ -136,5 +136,5 @@ Bot criado para otimizar o fluxo de trabalho da equipe de marketing da 4.events.
 ---
 
 **Status**: ✅ Ativo e funcionando  
-**Versão**: 1.0.7
+**Versão**: 1.0.8
 **Última atualização**: Agosto 2025
