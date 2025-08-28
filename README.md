@@ -23,6 +23,7 @@ Bot desenvolvido para automatizar e facilitar os processo de solicitação de ta
 - **Integração com N8N**: Envio automático de dados via webhook
 - **Integração com Microsoft Clarity**: Para obter dados de performance e desempenho do website e das landing pages
 - **Resposta com link**: Sempre que possível retorna mensagens com URLs diretas para os sistemas integrados
+- **Sistema de Logs Avançado com Winston**: Logging estruturado avançado com categorização, retenção automática, compressão automática e rotação diária para monitoramento e debugging
 - **Robustez Avançada**: Resistência a falhas temporárias do N8N com backoff progressivo e sistema de retries
 
 ## 🚀 Como Usar
@@ -100,6 +101,17 @@ O bot conta com um **sistema automático de retry**, para os comandos `/makertin
    # N8N Endpoints
    WEBHOOK=url_da_webhook_endpoint_para_comando_/marketing
    WEBHOOK_PARCERIA=url_da_webhook_endpoint_para_comando_/parceria
+
+   # SendPulse API Credenciais
+   SENDPULSE_CLIENT_ID=client_id
+   SENDPULSE_CLIENT_SECRET=client_secret
+
+   # IDs dos usuários do Discord Administradores do bot
+   BOT_ADMIN_DISCORD_USERS_ID=999999999999999,99999999999999999
+
+   # Configurações de Logging (Winston)
+   LOG_LEVEL=info
+   NODE_ENV=production
    ```
 
 4. **Inicie o bot**
@@ -107,13 +119,22 @@ O bot conta com um **sistema automático de retry**, para os comandos `/makertin
 
 ## 📁 Estrutura do Projeto
 ```
+├── logs/ (não comitado)
+│   ├── 4events-bot-YYYY-MM-DD.log            # Logs gerais
+│   ├── 4events-bot-commands-YYYY-MM-DD.log   # Logs de comandos
+│   ├── 4events-bot-error-YYYY-MM-DD.log      # Logs de erros
+│   ├── 4events-bot-exceptions-YYYY-MM-DD.log # Logs de exceções
+│   └── 4events-bot-rejections-YYYY-MM-DD.log # Logs de promises rejeitadas
 ├── src/
 │   ├── index.js      # Arquivo principal do bot
+│   ├── logger.js     # Configuração do sistema de logging com Winston
 │   └── emojis.json   # Configuração de emojis personalizados
 ├── .env              # Variáveis de ambiente (não commitado)
+├── .env.example      # Arquivo de exemplo/documentação do .env
+├── CHANGELOG.md      # Histórico de versões e mudanças
 ├── package.json      # Dependências do projeto
+├── package-lock.json # Lock das versões das dependências
 └── README.md         # Este arquivo
-
 ```
 ## 🛠️ Tecnologias Utilizadas
 
@@ -121,6 +142,7 @@ O bot conta com um **sistema automático de retry**, para os comandos `/makertin
 - **Discord.js** - Biblioteca para interação com Discord API
 - **N8N** - Automação de workflows
 - **Microsoft Clarity Data Export API** - Obtenção de dados e estatísticas de CRO
+- **Winston + Winston Daily Rotate File** - Sistema de logging estruturado com rotação diária de arquivos
 - **dotenv** - Gerenciamento de variáveis de ambiente
 
 ## 🔗 Links Úteis
@@ -136,5 +158,5 @@ Bot criado para otimizar o fluxo de trabalho da equipe de marketing da 4.events.
 ---
 
 **Status**: ✅ Ativo e funcionando  
-**Versão**: 1.0.8
+**Versão**: 1.0.9
 **Última atualização**: Agosto 2025

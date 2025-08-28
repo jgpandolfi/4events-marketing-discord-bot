@@ -6,10 +6,16 @@ import {
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
-  ActionRowBuilder
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  ComponentType
 } from "discord.js"
+import fs from "fs"
+import path from "path"
 import dotenv from "dotenv"
 import fetch from "node-fetch"
+import logger, { logCommand, logError, logWebhook, logPerformance } from './logger.js'
 
 import { createRequire } from "module"
 const require = createRequire(import.meta.url)
@@ -27,22 +33,37 @@ const RETRY_CONFIG = {
 
 // Validação das variáveis de ambiente
 if (!process.env.BOT_TOKEN) {
-  console.error("❌ Erro: BOT_TOKEN não está configurado no arquivo .env")
+  logger.error("❌ Erro: BOT_TOKEN não está configurado no arquivo .env", { 
+  missingConfig: 'BOT_TOKEN' 
+})
   process.exit(1)
 }
 
 if (!process.env.CANAL_MARKETING) {
-  console.error("❌ Erro: CANAL_MARKETING não está configurado no arquivo .env")
+  logger.error("❌ Erro: CANAL_MARKETING não está configurado no arquivo .env", { 
+  missingConfig: 'CANAL_MARKETING' 
+})
   process.exit(1)
 }
 
 if (!process.env.CLARITY_PROJECT_ID) {
-  console.error("❌ Erro: CLARITY_PROJECT_ID não está configurado no arquivo .env")
+  logger.error("❌ Erro: CLARITY_PROJECT_ID não está configurado no arquivo .env", { 
+  missingConfig: 'CLARITY_PROJECT_ID' 
+})
   process.exit(1)
 }
 
 if (!process.env.CLARITY_API_TOKEN) {
-  console.error("❌ Erro: CLARITY_API_TOKEN não está configurado no arquivo .env")
+  logger.error("❌ Erro: CLARITY_API_TOKEN não está configurado no arquivo .env", { 
+  missingConfig: 'CLARITY_API_TOKEN' 
+})
+  process.exit(1)
+}
+
+if (!process.env.BOT_ADMIN_DISCORD_USERS_ID) {
+  logger.error("❌ Erro: BOT_ADMIN_DISCORD_USERS_ID não está configurado no arquivo .env", { 
+    missingConfig: 'BOT_ADMIN_DISCORD_USERS_ID' 
+  })
   process.exit(1)
 }
 
@@ -55,12 +76,16 @@ const CLARITY_PROJECT_ID = process.env.CLARITY_PROJECT_ID
 const CLARITY_API_TOKEN = process.env.CLARITY_API_TOKEN
 const CLARITY_BASE_URL = "https://www.clarity.ms/export-data/api/v1"
 
+// Lista de IDs de usuários do Discord que são administradores do bot
+const BOT_ADMIN_DISCORD_USERS_ID = process.env.BOT_ADMIN_DISCORD_USERS_ID.split(',').map(id => id.trim())
+
 // Cria o cliente do Discord com as intents necessárias
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMessageReactions,
   ],
 })
 
@@ -70,21 +95,35 @@ async function executarComRetry(funcaoAsync, parametros, maxTentativas = 3, dela
   
   for (let tentativa = 1; tentativa <= maxTentativas; tentativa++) {
     try {
-      console.log(`📤 Tentativa ${tentativa}/${maxTentativas}`)
+      logger.info(`📤 Tentativa ${tentativa}/${maxTentativas}`, {
+        tentativa,
+        maxTentativas,
+        funcao: funcaoAsync.name
+      })
       
       const resultado = await funcaoAsync(...parametros)
       
       // Se sucesso, retorna imediatamente
       if (resultado.success) {
         if (tentativa > 1) {
-          console.log(`✅ Sucesso na tentativa ${tentativa}/${maxTentativas}`)
+          logger.info(`✅ Sucesso na tentativa ${tentativa}/${maxTentativas}`, {
+            tentativa,
+            maxTentativas,
+            sucesso: true,
+            funcao: funcaoAsync.name
+          })
         }
         return resultado
       }
       
       // Se não é erro 500, não tenta novamente
       if (!resultado.error?.includes('500') && !resultado.error?.includes('Internal Server Error')) {
-        console.log(`❌ Erro não temporário detectado, não retentar: ${resultado.error}`)
+        logger.warn(`❌ Erro não temporário detectado, não retentar: ${resultado.error}`, {
+          erro: resultado.error,
+          tentativa,
+          maxTentativas,
+          tipoErro: 'nao_temporario'
+        })
         return resultado
       }
       
@@ -93,7 +132,12 @@ async function executarComRetry(funcaoAsync, parametros, maxTentativas = 3, dela
       // Se não é a última tentativa, aguarda antes de tentar novamente
       if (tentativa < maxTentativas) {
         const delay = delayInicial * Math.pow(RETRY_CONFIG.backoffMultiplier, tentativa - 1) // Backoff progressivo
-        console.log(`⏳ Aguardando ${delay}ms antes da próxima tentativa...`)
+        logger.info(`⏳ Aguardando ${delay}ms antes da próxima tentativa...`, {
+          delay,
+          tentativa,
+          maxTentativas,
+          proximaTentativa: tentativa + 1
+        })
         await new Promise(resolve => setTimeout(resolve, delay))
       }
       
@@ -102,14 +146,25 @@ async function executarComRetry(funcaoAsync, parametros, maxTentativas = 3, dela
       
       if (tentativa < maxTentativas) {
         const delay = delayInicial * Math.pow(RETRY_CONFIG.backoffMultiplier, tentativa - 1)
-        console.log(`⏳ Erro capturado, aguardando ${delay}ms antes da próxima tentativa...`)
+        logger.warn(`⏳ Erro capturado, aguardando ${delay}ms antes da próxima tentativa...`, {
+          erro: error.message,
+          delay,
+          tentativa,
+          maxTentativas,
+          proximaTentativa: tentativa + 1
+        })
         await new Promise(resolve => setTimeout(resolve, delay))
       }
     }
   }
   
   // Se chegou aqui, todas as tentativas falharam
-  console.error(`❌ Todas as ${maxTentativas} tentativas falharam`)
+  logger.error(`❌ Todas as ${maxTentativas} tentativas falharam`, {
+    maxTentativas,
+    ultimoErro: ultimoErro?.error,
+    funcao: funcaoAsync.name,
+    falhaTotal: true
+  })
   return ultimoErro || { success: false, error: "Todas as tentativas falharam" }
 }
 
@@ -119,6 +174,14 @@ async function executarComRetryComFeedback(interaction, funcaoAsync, parametros,
   const maxTentativas = RETRY_CONFIG.maxTentativas
   const delayInicial = RETRY_CONFIG.delayInicial
   
+  logger.info("Iniciando retry com feedback visual", {
+    tipoOperacao,
+    maxTentativas,
+    delayInicial,
+    usuario: interaction.user.username,
+    funcao: funcaoAsync.name
+  })
+  
   for (let tentativa = 1; tentativa <= maxTentativas; tentativa++) {
     try {
       // Atualiza mensagem durante tentativas (só a partir da segunda)
@@ -127,16 +190,40 @@ async function executarComRetryComFeedback(interaction, funcaoAsync, parametros,
         await interaction.editReply(
           `${loadingEmoji} Tentativa ${tentativa}/${maxTentativas} - Processando ${tipoOperacao}...`
         )
+        
+        logger.info("Feedback visual atualizado para tentativa", {
+          tentativa,
+          maxTentativas,
+          tipoOperacao,
+          usuario: interaction.user.username
+        })
       }
       
       const resultado = await funcaoAsync(...parametros)
       
       if (resultado.success) {
+        if (tentativa > 1) {
+          logger.info("Sucesso após retry com feedback", {
+            tentativa,
+            maxTentativas,
+            tipoOperacao,
+            usuario: interaction.user.username,
+            sucesso: true
+          })
+        }
         return resultado
       }
       
       // Se não é erro 500, não tenta novamente
       if (!resultado.error?.includes('500') && !resultado.error?.includes('Internal Server Error')) {
+        logger.warn("Erro não temporário detectado no retry com feedback", {
+          erro: resultado.error,
+          tentativa,
+          maxTentativas,
+          tipoOperacao,
+          tipoErro: 'nao_temporario',
+          usuario: interaction.user.username
+        })
         return resultado
       }
       
@@ -151,18 +238,53 @@ async function executarComRetryComFeedback(interaction, funcaoAsync, parametros,
           `${loadingEmoji} Instabilidade detectada. Tentando novamente em ${Math.round(delay/1000)}s... (${tentativa}/${maxTentativas})`
         )
         
+        logger.info("Aguardando delay antes da próxima tentativa com feedback", {
+          delay,
+          tentativa,
+          maxTentativas,
+          tipoOperacao,
+          proximaTentativa: tentativa + 1,
+          usuario: interaction.user.username
+        })
+        
         await new Promise(resolve => setTimeout(resolve, delay))
       }
       
     } catch (error) {
       ultimoErro = { success: false, error: error.message }
       
+      logger.error("Erro capturado durante retry com feedback", {
+        erro: error.message,
+        tentativa,
+        maxTentativas,
+        tipoOperacao,
+        usuario: interaction.user.username,
+        stack: error.stack
+      })
+      
       if (tentativa < maxTentativas) {
         const delay = delayInicial * Math.pow(RETRY_CONFIG.backoffMultiplier, tentativa - 1)
+        
+        logger.info("Aguardando delay após erro capturado", {
+          delay,
+          tentativa,
+          maxTentativas,
+          proximaTentativa: tentativa + 1,
+          usuario: interaction.user.username
+        })
+        
         await new Promise(resolve => setTimeout(resolve, delay))
       }
     }
   }
+  
+  logger.error("Todas as tentativas falharam no retry com feedback", {
+    maxTentativas,
+    tipoOperacao,
+    ultimoErro: ultimoErro?.error,
+    usuario: interaction.user.username,
+    falhaTotal: true
+  })
   
   return ultimoErro || { success: false, error: "Todas as tentativas falharam" }
 }
@@ -181,12 +303,138 @@ function obterEmoji(nomeEmoji) {
     }
 
     // Retorna vazio se não encontrar o emoji
-    console.error(`❌ O emoji personalizado de nome ${nomeEmoji} não existe`)
+    logger.warn(`❌ O emoji personalizado de nome ${nomeEmoji} não existe`, {
+      nomeEmoji,
+      categoria: 'emoji_nao_encontrado',
+      emojisEstatico: Object.keys(emojis.estatico || {}),
+      emojisAnimado: Object.keys(emojis.animado || {}),
+      totalEmojisDisponiveis: (Object.keys(emojis.estatico || {}).length + Object.keys(emojis.animado || {}).length)
+    })
     return ""
   } catch (erro) {
-    console.error(`❌ Erro ao obter emoji ${nomeEmoji}: ${erro.message}`)
+    logger.error(`❌ Erro ao obter emoji ${nomeEmoji}: ${erro.message}`, {
+      nomeEmoji,
+      erro: erro.message,
+      stack: erro.stack,
+      categoria: 'erro_obter_emoji',
+      emojisCarregados: !!(emojis.estatico || emojis.animado)
+    })
     return ""
   }
+}
+
+// Função para ler arquivos de log
+async function lerArquivosLog(tipoLog = 'geral') {
+  try {
+    const logsDir = path.join(process.cwd(), 'logs')
+    const hoje = new Date().toISOString().split('T')[0]
+    
+    let nomeArquivo
+    switch (tipoLog) {
+      case 'error':
+        nomeArquivo = `4events-bot-error-${hoje}.log`
+        break
+      case 'commands':
+        nomeArquivo = `4events-bot-commands-${hoje}.log`
+        break
+      case 'exceptions':
+        nomeArquivo = `4events-bot-exceptions-${hoje}.log`
+        break
+      default:
+        nomeArquivo = `4events-bot-${hoje}.log`
+    }
+    
+    const caminhoArquivo = path.join(logsDir, nomeArquivo)
+    
+    if (!fs.existsSync(caminhoArquivo)) {
+      return { success: false, error: `Arquivo de log não encontrado: ${nomeArquivo}` }
+    }
+    
+    const conteudo = fs.readFileSync(caminhoArquivo, 'utf8')
+    const linhas = conteudo.trim().split('\n').filter(linha => linha.trim() !== '')
+    
+    // Pega as últimas 10 linhas
+    const ultimasLinhas = linhas.slice(-10)
+    
+    const logs = ultimasLinhas.map(linha => {
+      try {
+        return JSON.parse(linha)
+      } catch {
+        return { timestamp: 'N/A', level: 'info', message: linha }
+      }
+    })
+    
+    return { success: true, logs, total: linhas.length, arquivo: nomeArquivo }
+    
+  } catch (error) {
+    logger.error("❌ Erro ao ler arquivos de log:", {
+      erro: error.message,
+      stack: error.stack,
+      tipoLog: tipoLog,
+      categoria: 'discord_comando_logs',
+      operacao: 'erro_leitura_logs'
+    })
+    
+    return { success: false, error: error.message }
+  }
+}
+
+// Função para formatar logs para exibição
+function formatarLogsParaEmbed(logs, tipoLog, nomeArquivo, total) {
+  if (!logs || logs.length === 0) {
+    return {
+      title: `${obterEmoji("info")} Logs do sistema - ${tipoLog.toUpperCase()}`,
+      description: "Nenhum log encontrado para hoje",
+      color: 0xff4f00
+    }
+  }
+  
+  const logsTexto = logs.map((log, index) => {
+    const timestamp = log.timestamp ? new Date(log.timestamp).toLocaleTimeString('pt-BR') : 'N/A'
+    const level = log.level || 'info'
+    const message = (log.message || 'N/A').substring(0, 100)
+    
+    const emoji = level === 'error' ? obterEmoji("errado") : 
+                  level === 'warn' ? obterEmoji("warn") : 
+                  obterEmoji("info")
+    
+    return `${emoji} \`${timestamp} ${level.toUpperCase()} - ${message}${message.length > 100 ? '...' : ''}\``
+  }).join('\n')
+  
+  return {
+    title: `${obterEmoji("search")} Logs do sistema - ${tipoLog.toUpperCase()}`,
+    description: `**Arquivo:** \`${nomeArquivo}\`\n**Total de logs hoje:** \`${total}\`\n\n**Últimos 10 registros:**\n${logsTexto}`,
+    color: 0xff4f00,
+    footer: {
+      text: "4.events Marketing Bot • Sistema de logs",
+    },
+    timestamp: new Date().toISOString()
+  }
+}
+
+// Função para criar botões de navegação dos logs
+function criarBotoesLogs() {
+  const botaoGeral = new ButtonBuilder()
+    .setCustomId('logs_geral')
+    .setLabel('🌎 Todos')
+    .setStyle(ButtonStyle.Primary)
+  
+  const botaoErros = new ButtonBuilder()
+    .setCustomId('logs_error')
+    .setLabel('❌ Apenas erros')
+    .setStyle(ButtonStyle.Danger)
+  
+  const botaoComandos = new ButtonBuilder()
+    .setCustomId('logs_commands')
+    .setLabel('⌨️ Apenas de comandos')
+    .setStyle(ButtonStyle.Success)
+  
+  const botaoExcecoes = new ButtonBuilder()
+    .setCustomId('logs_exceptions')
+    .setLabel('🚨 Apenas exceções')
+    .setStyle(ButtonStyle.Secondary)
+  
+  return new ActionRowBuilder().addComponents(botaoGeral, botaoErros, botaoComandos, botaoExcecoes)
 }
 
 // Define o comando slash /marketing
@@ -403,7 +651,16 @@ async function buscarDadosClarity(numDias, urlFiltro = null) {
       "Content-Type": "application/json"
     }
     
-    console.log(`📤 Fazendo requisição para Clarity API: ${url}`)
+    logger.info(`📤 Fazendo requisição para Clarity API: ${url}`, {
+      numDias,
+      urlFiltro,
+      dimension: params.dimension1,
+      endpoint: 'project-live-insights',
+      method: 'GET',
+      hasUrlFilter: !!urlFiltro,
+      queryParams: params,
+      categoria: 'clarity_api_request'
+    })
     
     const response = await fetch(url, {
       method: "GET",
@@ -415,12 +672,32 @@ async function buscarDadosClarity(numDias, urlFiltro = null) {
     }
     
     const result = await response.json()
-    console.log("✅ Resposta da Clarity API recebida")
+    
+    logger.info("✅ Resposta da Clarity API recebida", {
+      numDias,
+      urlFiltro,
+      statusCode: response.status,
+      statusText: response.statusText,
+      responseSize: JSON.stringify(result).length,
+      hasData: !!(result && Array.isArray(result) && result.length > 0),
+      dataCount: Array.isArray(result) ? result.length : 0,
+      endpoint: 'project-live-insights',
+      categoria: 'clarity_api_success'
+    })
     
     return { success: true, data: result }
     
   } catch (error) {
-    console.error("❌ Erro ao buscar dados do Clarity:", error.message)
+    logger.error("❌ Erro ao buscar dados do Clarity:", {
+      erro: error.message,
+      stack: error.stack,
+      numDias,
+      urlFiltro,
+      endpoint: 'project-live-insights',
+      clarityBaseUrl: CLARITY_BASE_URL,
+      hasApiToken: !!CLARITY_API_TOKEN,
+      categoria: 'clarity_api_error'
+    })
     return { success: false, error: error.message }
   }
 }
@@ -441,7 +718,17 @@ async function buscarEventosInteligentesClarity(numDias, urlFiltro = null) {
       "Content-Type": "application/json"
     }
     
-    console.log(`📤 Fazendo requisição para eventos inteligentes Clarity API: ${url}`)
+    logger.info(`📤 Fazendo requisição para eventos inteligentes Clarity API: ${url}`, {
+      numDias,
+      urlFiltro,
+      dimension: params.dimension1,
+      endpoint: 'project-live-insights',
+      method: 'GET',
+      hasUrlFilter: !!urlFiltro,
+      queryParams: params,
+      tipoConsulta: 'eventos_inteligentes',
+      categoria: 'clarity_smart_events_request'
+    })
     
     const response = await fetch(url, {
       method: "GET",
@@ -453,12 +740,34 @@ async function buscarEventosInteligentesClarity(numDias, urlFiltro = null) {
     }
     
     const result = await response.json()
-    console.log("✅ Resposta de eventos inteligentes da Clarity API recebida")
+    
+    logger.info("✅ Resposta de eventos inteligentes da Clarity API recebida", {
+      numDias,
+      urlFiltro,
+      statusCode: response.status,
+      statusText: response.statusText,
+      responseSize: JSON.stringify(result).length,
+      hasData: !!(result && Array.isArray(result) && result.length > 0),
+      dataCount: Array.isArray(result) ? result.length : 0,
+      endpoint: 'project-live-insights',
+      tipoConsulta: 'eventos_inteligentes',
+      categoria: 'clarity_smart_events_success'
+    })
     
     return { success: true, data: result }
     
   } catch (error) {
-    console.error("❌ Erro ao buscar eventos inteligentes do Clarity:", error.message)
+    logger.error("❌ Erro ao buscar eventos inteligentes do Clarity:", {
+      erro: error.message,
+      stack: error.stack,
+      numDias,
+      urlFiltro,
+      endpoint: 'project-live-insights',
+      tipoConsulta: 'eventos_inteligentes',
+      clarityBaseUrl: CLARITY_BASE_URL,
+      hasApiToken: !!CLARITY_API_TOKEN,
+      categoria: 'clarity_smart_events_error'
+    })
     return { success: false, error: error.message }
   }
 }
@@ -559,6 +868,14 @@ function processarDadosClarity(dadosClarity, urlAlvo = null) {
 function processarEventosInteligentes(dadosEventos) {
   try {
     if (!dadosEventos || !Array.isArray(dadosEventos) || dadosEventos.length === 0) {
+      logger.info("Nenhum dado de eventos inteligentes fornecido", {
+        dadosEventosExiste: !!dadosEventos,
+        isArray: Array.isArray(dadosEventos),
+        length: dadosEventos?.length || 0,
+        categoria: 'clarity_smart_events_processing',
+        resultado: 'dados_vazios'
+      })
+      
       return {
         success: true,
         totalEventos: 0,
@@ -569,6 +886,15 @@ function processarEventosInteligentes(dadosEventos) {
     const eventosData = dadosEventos.find(item => item.metricName === "Traffic")
     
     if (!eventosData || !eventosData.information || !Array.isArray(eventosData.information)) {
+      logger.warn("Dados de eventos inteligentes sem informações de tráfego válidas", {
+        hasEventosData: !!eventosData,
+        hasInformation: !!(eventosData?.information),
+        isInformationArray: Array.isArray(eventosData?.information),
+        informationLength: eventosData?.information?.length || 0,
+        categoria: 'clarity_smart_events_processing',
+        resultado: 'estrutura_invalida'
+      })
+      
       return {
         success: true,
         totalEventos: 0,
@@ -593,6 +919,15 @@ function processarEventosInteligentes(dadosEventos) {
       }
     })
     
+    logger.info("Eventos inteligentes processados com sucesso", {
+      totalEventos,
+      eventosFormulario,
+      eventosProcessados: eventosData.information.length,
+      percentualFormulario: totalEventos > 0 ? ((eventosFormulario / totalEventos) * 100).toFixed(1) : 0,
+      categoria: 'clarity_smart_events_processing',
+      resultado: 'sucesso'
+    })
+    
     return {
       success: true,
       totalEventos,
@@ -600,7 +935,16 @@ function processarEventosInteligentes(dadosEventos) {
     }
     
   } catch (error) {
-    console.error("❌ Erro ao processar eventos inteligentes:", error.message)
+    logger.error("❌ Erro ao processar eventos inteligentes:", {
+      erro: error.message,
+      stack: error.stack,
+      dadosEventosType: typeof dadosEventos,
+      dadosEventosLength: dadosEventos?.length || 0,
+      hasTrafficData: !!(dadosEventos?.find?.(item => item.metricName === "Traffic")),
+      categoria: 'clarity_smart_events_processing',
+      resultado: 'erro'
+    })
+    
     return {
       success: true,
       totalEventos: 0,
@@ -626,7 +970,23 @@ async function enviarParaN8N(cardTitle, detalhes, prazo, usuario) {
       plataforma: "Discord"
     }
 
-    console.log("📤 Enviando dados para N8N (Marketing):", JSON.stringify(body, null, 2))
+    logger.info("📤 Enviando dados para N8N (Marketing):", {
+      cardTitle: cardTitle,
+      detalhes: detalhes.substring(0, 100) + (detalhes.length > 100 ? '...' : ''),
+      prazoFormatado: prazo.dataFormatada,
+      prazoISO: prazo.dataISO,
+      usuario: {
+        username: usuario.username,
+        displayName: usuario.displayName,
+        id: usuario.id
+      },
+      bodySize: JSON.stringify(body).length,
+      webhookUrl: WEBHOOK_URL ? 'configurada' : 'não configurada',
+      timestamp: body.timestamp,
+      plataforma: body.plataforma,
+      categoria: 'n8n_webhook_marketing',
+      operacao: 'envio'
+    })
 
     const response = await fetch(WEBHOOK_URL, {
       method: "POST",
@@ -642,16 +1002,44 @@ async function enviarParaN8N(cardTitle, detalhes, prazo, usuario) {
 
     const result = await response.json().catch(() => ({ success: true }))
     
-    console.log("✅ Resposta do N8N (Marketing):", result)
+    logger.info("✅ Resposta do N8N (Marketing):", {
+      statusCode: response.status,
+      statusText: response.statusText,
+      success: true,
+      responseData: result,
+      hasTaskUrl: !!(result?.url || result?.taskUrl || result?.cardUrl),
+      taskUrl: result?.url || result?.taskUrl || result?.cardUrl || null,
+      responseSize: JSON.stringify(result).length,
+      cardTitle: cardTitle,
+      usuario: usuario.username,
+      categoria: 'n8n_webhook_marketing',
+      operacao: 'resposta_sucesso'
+    })
+    
     return { success: true, data: result }
 
   } catch (error) {
-    console.error("❌ Erro ao enviar para N8N (Marketing):", error.message)
+    logger.error("❌ Erro ao enviar para N8N (Marketing):", {
+      erro: error.message,
+      stack: error.stack,
+      cardTitle: cardTitle,
+      detalhes: detalhes.substring(0, 100) + (detalhes.length > 100 ? '...' : ''),
+      usuario: {
+        username: usuario.username,
+        displayName: usuario.displayName,
+        id: usuario.id
+      },
+      webhookUrl: WEBHOOK_URL ? 'configurada' : 'não configurada',
+      errorType: error.name,
+      categoria: 'n8n_webhook_marketing',
+      operacao: 'erro'
+    })
+    
     return { success: false, error: error.message }
   }
 }
 
-// Função para enviar dados de parceria para a webhook do N8N
+// Função para enviar dados de parceria para a webhook do N8N (Parceria)
 async function enviarParceriaParaN8N(cardURL, dataEvento, usuario) {
   try {
     const body = {
@@ -670,7 +1058,22 @@ async function enviarParceriaParaN8N(cardURL, dataEvento, usuario) {
       plataforma: "Discord"
     }
 
-    console.log("📤 Enviando dados de parceria para N8N:", JSON.stringify(body, null, 2))
+    logger.info("📤 Enviando dados de parceria para N8N:", {
+      cardURL: cardURL,
+      dataEventoFormatada: dataEvento.dataFormatada,
+      dataEventoISO: dataEvento.dataISO,
+      usuario: {
+        username: usuario.username,
+        displayName: usuario.displayName,
+        id: usuario.id
+      },
+      bodySize: JSON.stringify(body).length,
+      webhookUrl: WEBHOOK_URL_PARCERIA ? 'configurada' : 'não configurada',
+      timestamp: body.timestamp,
+      plataforma: body.plataforma,
+      categoria: 'n8n_webhook_parceria',
+      operacao: 'envio'
+    })
 
     const response = await fetch(WEBHOOK_URL_PARCERIA, {
       method: "POST",
@@ -686,11 +1089,41 @@ async function enviarParceriaParaN8N(cardURL, dataEvento, usuario) {
 
     const result = await response.json().catch(() => ({ success: true }))
     
-    console.log("✅ Resposta do N8N (Parceria):", result)
+    logger.info("✅ Resposta do N8N (Parceria):", {
+      statusCode: response.status,
+      statusText: response.statusText,
+      success: true,
+      responseData: result,
+      hasCardName: !!(result?.name),
+      cardName: result?.name || null,
+      responseSize: JSON.stringify(result).length,
+      cardURL: cardURL,
+      dataEvento: dataEvento.dataFormatada,
+      usuario: usuario.username,
+      categoria: 'n8n_webhook_parceria',
+      operacao: 'resposta_sucesso'
+    })
+    
     return { success: true, data: result }
 
   } catch (error) {
-    console.error("❌ Erro ao enviar parceria para N8N:", error.message)
+    logger.error("❌ Erro ao enviar parceria para N8N:", {
+      erro: error.message,
+      stack: error.stack,
+      cardURL: cardURL,
+      dataEventoFormatada: dataEvento.dataFormatada,
+      dataEventoISO: dataEvento.dataISO,
+      usuario: {
+        username: usuario.username,
+        displayName: usuario.displayName,
+        id: usuario.id
+      },
+      webhookUrl: WEBHOOK_URL_PARCERIA ? 'configurada' : 'não configurada',
+      errorType: error.name,
+      categoria: 'n8n_webhook_parceria',
+      operacao: 'erro'
+    })
+    
     return { success: false, error: error.message }
   }
 }
@@ -701,7 +1134,18 @@ async function enviarAlertaCanal(nomeDemanda, detalhesDemanda, validacaoData, us
     const canalMarketing = client.channels.cache.get(process.env.CANAL_MARKETING)
     
     if (!canalMarketing) {
-      console.error("❌ Canal de marketing não encontrado!")
+      logger.error("❌ Canal de marketing não encontrado!", {
+        canalId: process.env.CANAL_MARKETING,
+        nomeDemanda: nomeDemanda,
+        usuario: {
+          username: usuario.username,
+          displayName: usuario.displayName,
+          id: usuario.id
+        },
+        taskUrl: taskUrl,
+        categoria: 'discord_canal_marketing',
+        operacao: 'canal_nao_encontrado'
+      })
       return
     }
 
@@ -760,10 +1204,48 @@ async function enviarAlertaCanal(nomeDemanda, detalhesDemanda, validacaoData, us
       embeds: [embedAlerta],
     })
 
-    console.log(`📢 Alerta enviado no canal de marketing para a tarefa: "${nomeDemanda}"`)
+    logger.info("📢 Alerta enviado no canal de marketing para a tarefa:", {
+      nomeDemanda: nomeDemanda,
+      detalhesDemanda: detalhesDemanda.substring(0, 100) + (detalhesDemanda.length > 100 ? '...' : ''),
+      prazo: validacaoData.dataFormatada,
+      prazoISO: validacaoData.iso,
+      usuario: {
+        username: usuario.username,
+        displayName: usuario.displayName,
+        id: usuario.id,
+        tag: usuario.tag
+      },
+      taskUrl: taskUrl,
+      hasTaskUrl: !!taskUrl,
+      canalId: process.env.CANAL_MARKETING,
+      canalNome: canalMarketing.name,
+      embedFieldsCount: embedFields.length,
+      embedColor: embedAlerta.color,
+      mentionRole: "422833735780794379",
+      categoria: 'discord_canal_marketing',
+      operacao: 'alerta_enviado_sucesso'
+    })
 
   } catch (error) {
-    console.error("❌ Erro ao enviar alerta no canal de marketing:", error.message)
+    logger.error("❌ Erro ao enviar alerta no canal de marketing:", {
+      erro: error.message,
+      stack: error.stack,
+      nomeDemanda: nomeDemanda,
+      detalhesDemanda: detalhesDemanda.substring(0, 100) + (detalhesDemanda.length > 100 ? '...' : ''),
+      prazo: validacaoData?.dataFormatada,
+      prazoISO: validacaoData?.iso,
+      usuario: {
+        username: usuario.username,
+        displayName: usuario.displayName,
+        id: usuario.id,
+        tag: usuario.tag
+      },
+      taskUrl: taskUrl,
+      canalId: process.env.CANAL_MARKETING,
+      errorType: error.name,
+      categoria: 'discord_canal_marketing',
+      operacao: 'erro_envio_alerta'
+    })
   }
 }
 
@@ -773,7 +1255,20 @@ async function enviarNotificacaParceria(cardURL, dataEvento, usuario, nomeCard =
     const canalParceria = client.channels.cache.get("1397497396606537738")
     
     if (!canalParceria) {
-      console.error("❌ Canal de parceria não encontrado!")
+      logger.error("❌ Canal de parceria não encontrado!", {
+        canalId: "1397497396606537738",
+        cardURL: cardURL,
+        dataEvento: dataEvento.dataFormatada,
+        dataEventoISO: dataEvento.dataISO,
+        usuario: {
+          username: usuario.username,
+          displayName: usuario.displayName,
+          id: usuario.id
+        },
+        nomeCard: nomeCard,
+        categoria: 'discord_canal_parceria',
+        operacao: 'canal_nao_encontrado'
+      })
       return
     }
 
@@ -828,10 +1323,47 @@ async function enviarNotificacaParceria(cardURL, dataEvento, usuario, nomeCard =
       embeds: [embedParceria],
     })
 
-    console.log(`📢 Notificação de parceria enviada para: "${nomeCard || 'Card não identificado'}"`)
+    logger.info("📢 Notificação de parceria enviada:", {
+      cardURL: cardURL,
+      nomeCard: nomeCard || 'Card não identificado',
+      hasNomeCard: !!nomeCard,
+      dataEvento: dataEvento.dataFormatada,
+      dataEventoISO: dataEvento.dataISO,
+      usuario: {
+        username: usuario.username,
+        displayName: usuario.displayName,
+        id: usuario.id,
+        tag: usuario.tag
+      },
+      canalId: "1397497396606537738",
+      canalNome: canalParceria.name,
+      embedFieldsCount: embedFields.length,
+      embedColor: embedParceria.color,
+      embedTitle: embedParceria.title,
+      timestamp: new Date().toISOString(),
+      categoria: 'discord_canal_parceria',
+      operacao: 'notificacao_enviada_sucesso'
+    })
 
   } catch (error) {
-    console.error("❌ Erro ao enviar notificação de parceria:", error.message)
+    logger.error("❌ Erro ao enviar notificação de parceria:", {
+      erro: error.message,
+      stack: error.stack,
+      cardURL: cardURL,
+      nomeCard: nomeCard,
+      dataEvento: dataEvento?.dataFormatada,
+      dataEventoISO: dataEvento?.dataISO,
+      usuario: {
+        username: usuario.username,
+        displayName: usuario.displayName,
+        id: usuario.id,
+        tag: usuario.tag
+      },
+      canalId: "1397497396606537738",
+      errorType: error.name,
+      categoria: 'discord_canal_parceria',
+      operacao: 'erro_envio_notificacao'
+    })
   }
 }
 
@@ -862,7 +1394,16 @@ function formatarNumero(numero) {
 // Evento: Bot está pronto
 client.once("ready", async () => {
   try {
-    console.log(`✅ Bot 4.events Marketing online como ${client.user.tag}`)
+    logger.info("✅ Bot 4.events Marketing online", {
+      botTag: client.user.tag,
+      botId: client.user.id,
+      botUsername: client.user.username,
+      discriminator: client.user.discriminator,
+      verified: client.user.verified,
+      timestamp: new Date().toISOString(),
+      categoria: 'discord_bot_startup',
+      operacao: 'bot_ready_sucesso'
+    })
     
     // Registra comandos do bot (global)
     await client.application.commands.set([
@@ -878,12 +1419,41 @@ client.once("ready", async () => {
       cmdHelp,
     ])
     
-    console.log("✅ Comandos slash atualizados globalmente")
+    logger.info("✅ Comandos slash atualizados globalmente", {
+      comandosRegistrados: [
+        'marketing',
+        'parceria', 
+        'cro',
+        'midiakit',
+        'apresentações',
+        'modelos',
+        'capa-linkedin',
+        'fundo-escritorio',
+        'ping',
+        'help'
+      ],
+      totalComandos: 10,
+      botTag: client.user.tag,
+      botId: client.user.id,
+      timestamp: new Date().toISOString(),
+      categoria: 'discord_comandos',
+      operacao: 'comandos_registrados_sucesso'
+    })
     
     client.user.setActivity("solicitações de marketing e parcerias", { type: "WATCHING" })
     
   } catch (error) {
-    console.error(`❌ Erro na inicialização do bot: ${error.message}`)
+    logger.error("❌ Erro na inicialização do bot:", {
+      erro: error.message,
+      stack: error.stack,
+      errorType: error.name,
+      botTag: client.user?.tag,
+      botId: client.user?.id,
+      botUsername: client.user?.username,
+      timestamp: new Date().toISOString(),
+      categoria: 'discord_bot_startup',
+      operacao: 'erro_inicializacao_bot'
+    })
   }
 })
 
@@ -1039,10 +1609,26 @@ client.on("interactionCreate", async (interaction) => {
 
           // Envia alerta no canal de marketing
           await enviarAlertaCanal(nomeDemanda, detalhesDemanda, validacaoData, usuario, taskUrl)
-          console.log(`✅ Solicitação criada por ${usuario.displayName}: "${nomeDemanda}" - Prazo: ${validacaoData.dataFormatada}`)
+          logger.info("✅ Solicitação criada:", {
+            nomeCard: nomeDemanda,
+            prazo: validacaoData.dataFormatada,
+            prazoISO: validacaoData.iso,
+            hasTaskUrl: !!taskUrl,
+            taskUrl: taskUrl,
+            usuario: {
+              username: usuario.username,
+              displayName: usuario.displayName,
+              id: usuario.id,
+              tag: usuario.tag
+            },
+            detalhesLength: detalhesDemanda?.length || 0,
+            timestamp: new Date().toISOString(),
+            categoria: 'discord_marketing_solicitacao',
+            operacao: 'solicitacao_criada_sucesso'
+          })
 
         } else {
-          // Mensagem de erro melhorada
+          // Mensagem de erro detalhada
           const isServerError = resultado.error?.includes('500') || 
                               resultado.error?.includes('Internal Server Error')
           
@@ -1057,7 +1643,25 @@ client.on("interactionCreate", async (interaction) => {
           }
 
           await interaction.editReply({ content: errorMessage })
-          console.error(`❌ Falha ao criar solicitação para ${usuario.displayName}: ${resultado.error}`)
+          logger.error("❌ Falha ao criar solicitação:", {
+            erro: resultado.error,
+            isServerError: isServerError,
+            maxTentativas: RETRY_CONFIG.maxTentativas,
+            nomeCard: nomeDemanda,
+            prazo: validacaoData?.dataFormatada,
+            prazoISO: validacaoData?.iso,
+            usuario: {
+              username: usuario.username,
+              displayName: usuario.displayName,
+              id: usuario.id,
+              tag: usuario.tag
+            },
+            detalhesLength: detalhesDemanda?.length || 0,
+            errorMessage: errorMessage,
+            timestamp: new Date().toISOString(),
+            categoria: 'discord_marketing_solicitacao',
+            operacao: 'erro_criar_solicitacao'
+          })
         }
       }
       
@@ -1171,11 +1775,24 @@ client.on("interactionCreate", async (interaction) => {
 
           // Envia notificação no canal de parceria
           await enviarNotificacaParceria(validacaoURL.url, dadosEvento, usuario, nomeCard)
-
-          console.log(`✅ Parceria registrada por ${usuario.displayName}: "${nomeCard || 'Card não identificado'}" - Data: ${validacaoData.dataFormatada}`)
+          logger.info("✅ Parceria registrada:", {
+            nomeCard: nomeCard || 'Card não identificado',
+            dataEvento: validacaoData.dataFormatada,
+            dataEventoISO: validacaoData.iso,
+            cardURL: validacaoURL.url,
+            usuario: {
+              username: usuario.username,
+              displayName: usuario.displayName,
+              id: usuario.id,
+              tag: usuario.tag
+            },
+            timestamp: new Date().toISOString(),
+            categoria: 'discord_parceria_registro',
+            operacao: 'parceria_registrada_sucesso'
+          })
 
         } else {
-          // Mensagem de erro melhorada
+          // Mensagem de erro detalhada
           const isServerError = resultado.error?.includes('500') || 
                               resultado.error?.includes('Internal Server Error')
           
@@ -1190,7 +1807,24 @@ client.on("interactionCreate", async (interaction) => {
           }
 
           await interaction.editReply({ content: errorMessage })
-          console.error(`❌ Falha ao registrar parceria para ${usuario.displayName}: ${resultado.error}`)
+          logger.error("❌ Falha ao registrar parceria:", {
+            erro: resultado.error,
+            isServerError: isServerError,
+            maxTentativas: RETRY_CONFIG.maxTentativas,
+            cardURL: validacaoURL?.url,
+            dataEvento: validacaoData?.dataFormatada,
+            dataEventoISO: validacaoData?.iso,
+            usuario: {
+              username: usuario.username,
+              displayName: usuario.displayName,
+              id: usuario.id,
+              tag: usuario.tag
+            },
+            errorMessage: errorMessage,
+            timestamp: new Date().toISOString(),
+            categoria: 'discord_parceria_registro',
+            operacao: 'erro_registrar_parceria'
+          })
         }
       }
     }
@@ -1449,7 +2083,24 @@ client.on("interactionCreate", async (interaction) => {
             tag: interaction.user.tag,
           }
 
-          console.log(`✅ Dados do Clarity consultados por ${usuario.displayName}: "${urlCompleta}" - ${dataFormatada}`)
+          logger.info("✅ Dados do Clarity consultados:", {
+            urlCompleta: urlCompleta,
+            dataFormatada: dataFormatada,
+            numDias: numDias,
+            tipoAnalise: tipoAnalise,
+            urlParaFiltro: urlParaFiltro,
+            usuario: {
+              username: usuario.username,
+              displayName: usuario.displayName,
+              id: usuario.id,
+              tag: usuario.tag
+            },
+            resumo: dadosProcessados.resumo,
+            totalItens: dadosProcessados.totalItens,
+            timestamp: new Date().toISOString(),
+            categoria: 'discord_clarity_consulta',
+            operacao: 'consulta_clarity_sucesso'
+          })
 
         } else {
           // Erro no processamento
@@ -1457,7 +2108,24 @@ client.on("interactionCreate", async (interaction) => {
             content: `❌ **Erro ao processar dados**\n\`\`\`${dadosProcessados.erro}\`\`\`\nTente novamente ou verifique os parâmetros.`,
           })
           
-          console.error(`❌ Erro ao processar dados do Clarity: ${dadosProcessados.erro}`)
+          logger.error("❌ Erro ao processar dados do Clarity:", {
+            erro: dadosProcessados.erro,
+            urlCompleta: urlCompleta,
+            dataFormatada: dataFormatada,
+            numDias: numDias,
+            tipoAnalise: tipoAnalise,
+            urlParaFiltro: urlParaFiltro,
+            usuario: {
+              username: usuario.username,
+              displayName: usuario.displayName,
+              id: usuario.id,
+              tag: usuario.tag
+            },
+            dadosProcessados: dadosProcessados,
+            timestamp: new Date().toISOString(),
+            categoria: 'discord_clarity_consulta',
+            operacao: 'erro_processar_dados_clarity'
+          })
         }
         
       } else {
@@ -1466,7 +2134,24 @@ client.on("interactionCreate", async (interaction) => {
           content: `❌ **Erro ao consultar Microsoft Clarity**\n\`\`\`${resultado.error}\`\`\`\nTente novamente ou entre em contato com o suporte.`,
         })
         
-        console.error(`❌ Erro ao consultar Clarity API: ${resultado.error}`)
+        logger.error("❌ Erro ao consultar Clarity API:", {
+          erro: resultado.error,
+          urlCompleta: urlCompleta,
+          dataFormatada: dataFormatada,
+          numDias: numDias,
+          tipoAnalise: tipoAnalise,
+          urlParaFiltro: urlParaFiltro,
+          clarityApiUrl: `${CLARITY_BASE_URL}/project-live-insights`,
+          usuario: {
+            username: usuario.username,
+            displayName: usuario.displayName,
+            id: usuario.id,
+            tag: usuario.tag
+          },
+          timestamp: new Date().toISOString(),
+          categoria: 'discord_clarity_consulta',
+          operacao: 'erro_consultar_clarity_api'
+        })
       }
     }
 
@@ -1527,7 +2212,18 @@ client.on("interactionCreate", async (interaction) => {
         tag: interaction.user.tag,
       }
 
-      console.log(`✅ Mídia kit acessado por ${usuario.displayName}`)
+      logger.info("✅ Mídia kit acessado:", {
+        usuario: {
+          username: usuario.username,
+          displayName: usuario.displayName,
+          id: usuario.id,
+          tag: usuario.tag
+        },
+        comando: "midiakit",
+        timestamp: new Date().toISOString(),
+        categoria: 'discord_comando_acesso',
+        operacao: 'midiakit_acessado'
+      })
     }
 
     // Comando /apresentações
@@ -1570,7 +2266,18 @@ client.on("interactionCreate", async (interaction) => {
         tag: interaction.user.tag,
       }
 
-      console.log(`✅ Apresentações acessadas por ${usuario.displayName}`)
+      logger.info("✅ Apresentações acessadas:", {
+        usuario: {
+          username: usuario.username,
+          displayName: usuario.displayName,
+          id: usuario.id,
+          tag: usuario.tag
+        },
+        comando: "apresentações",
+        timestamp: new Date().toISOString(),
+        categoria: 'discord_comando_acesso',
+        operacao: 'apresentacoes_acessadas'
+      })
     }
 
     // Comando /modelos
@@ -1615,7 +2322,18 @@ client.on("interactionCreate", async (interaction) => {
         tag: interaction.user.tag,
       }
 
-      console.log(`✅ Modelos acessados por ${usuario.displayName}`)
+      logger.info("✅ Modelos acessados:", {
+        usuario: {
+          username: usuario.username,
+          displayName: usuario.displayName,
+          id: usuario.id,
+          tag: usuario.tag
+        },
+        comando: "modelos",
+        timestamp: new Date().toISOString(),
+        categoria: 'discord_comando_acesso',
+        operacao: 'modelos_acessados'
+      })
     }
 
     // Comando /ping
@@ -1668,7 +2386,18 @@ client.on("interactionCreate", async (interaction) => {
         tag: interaction.user.tag,
       }
 
-      console.log(`✅ Capa LinkedIn acessada por ${usuario.displayName}`)
+      logger.info("✅ Capa LinkedIn acessada:", {
+        usuario: {
+          username: usuario.username,
+          displayName: usuario.displayName,
+          id: usuario.id,
+          tag: usuario.tag
+        },
+        comando: "capa-linkedin",
+        timestamp: new Date().toISOString(),
+        categoria: 'discord_comando_acesso',
+        operacao: 'capa_linkedin_acessada'
+      })
     }
 
     // Comando /fundo-escritorio
@@ -1689,7 +2418,18 @@ client.on("interactionCreate", async (interaction) => {
         tag: interaction.user.tag,
       }
 
-      console.log(`✅ Fundo de escritório acessado por ${usuario.displayName}`)
+      logger.info("✅ Fundo de escritório acessado:", {
+        usuario: {
+          username: usuario.username,
+          displayName: usuario.displayName,
+          id: usuario.id,
+          tag: usuario.tag
+        },
+        comando: "fundo-escritorio",
+        timestamp: new Date().toISOString(),
+        categoria: 'discord_comando_acesso',
+        operacao: 'fundo_escritorio_acessado'
+      })
     }
 
     // Comando /help
@@ -1842,7 +2582,24 @@ client.on("interactionCreate", async (interaction) => {
 
 
   } catch (error) {
-    console.error(`❌ Erro ao processar comando ${interaction.commandName}:`, error.message)
+      logger.error("❌ Erro ao processar comando:", {
+        comando: interaction.commandName,
+        erro: error.message,
+        stack: error.stack,
+        usuario: {
+          username: interaction.user?.username,
+          displayName: interaction.member?.displayName || interaction.user?.username,
+          id: interaction.user?.id,
+          tag: interaction.user?.tag
+        },
+        servidor: {
+          id: interaction.guildId,
+          nome: interaction.guild?.name
+        },
+        timestamp: new Date().toISOString(),
+        categoria: 'discord_comando_erro',
+        operacao: 'processamento_comando_falhou'
+      })
     
     const errorMessage = `${obterEmoji("errado")} Ocorreu um erro interno. Tente novamente ou contate o suporte.`
     
@@ -1857,40 +2614,284 @@ client.on("interactionCreate", async (interaction) => {
   }
 })
 
+// Evento: Processar mensagens "comuns" (que não são comandos slash) e que tem menção ao bot
+client.on("messageCreate", async (message) => {
+  try {
+    // Ignora mensagens do próprio bot
+    if (message.author.bot) return
+    
+    // Verifica se o bot foi mencionado
+    if (!message.mentions.has(client.user)) return
+    
+    // Verifica se a mensagem contém "log" ou "logs"
+    const conteudo = message.content.toLowerCase()
+    if (!conteudo.includes('log') && !conteudo.includes('logs')) return
+    
+    // Verifica se o usuário está autorizado (administrador do bot)
+    const usuarioAutorizado = BOT_ADMIN_DISCORD_USERS_ID.includes(message.author.id)
+    
+    if (!usuarioAutorizado) {
+      // Reage com emoji de erro
+      await message.react(obterEmoji("errado") || "❌")
+      
+      // Responde com mensagem de erro
+      const embedErro = {
+        color: 0xff0000,
+        title: `${obterEmoji("errado")} Acesso Negado`,
+        description: "**Você não tem permissão para acessar os logs do sistema.**\n\n" +
+                     "Este comando é restrito a administradores autorizados do bot.",
+        footer: {
+          text: "4.events Marketing Bot • Acesso Restrito",
+        },
+        timestamp: new Date().toISOString(),
+      }
+      
+      await message.reply({
+        embeds: [embedErro],
+        flags: MessageFlags.Ephemeral,
+      })
+      
+      logger.warn("🚫 Tentativa de acesso não autorizado aos logs:", {
+        usuario: {
+          id: message.author.id,
+          username: message.author.username,
+          tag: message.author.tag
+        },
+        servidor: {
+          id: message.guild?.id,
+          nome: message.guild?.name
+        },
+        canal: {
+          id: message.channel.id,
+          nome: message.channel.name
+        },
+        mensagem: message.content,
+        timestamp: new Date().toISOString(),
+        categoria: 'discord_comando_logs',
+        operacao: 'acesso_negado'
+      })
+      
+      return
+    }
+    
+    // Reage com emoji de sucesso
+    await message.react(obterEmoji("certo") || "✅")
+
+    // Envia feedback imediato ao usuário
+    const loadingEmoji = obterEmoji("loading")
+    const respostaInicial = await message.reply(`${loadingEmoji} Buscando logs do sistema...`)
+
+    // Busca logs gerais por padrão
+    const resultado = await lerArquivosLog('geral')
+    
+    if (!resultado.success) {
+      const embedErro = {
+        color: 0xff0000,
+        title: `${obterEmoji("errado")} Erro ao Carregar Logs`,
+        description: `**Erro:** ${resultado.error}`,
+        footer: {
+          text: "4.events Marketing Bot • Sistema de Logs",
+        },
+        timestamp: new Date().toISOString(),
+      }
+      
+      await respostaInicial.edit({
+        content: "",
+        embeds: [embedErro]
+      })
+      return
+    }
+    
+    // Cria embed com os logs
+    const embedLogs = formatarLogsParaEmbed(resultado.logs, 'geral', resultado.arquivo, resultado.total)
+    const botoesNavegacao = criarBotoesLogs()
+    
+    // Edita resposta inicial (de carregamento)
+    await respostaInicial.edit({
+      content: "",
+      embeds: [embedLogs],
+      components: [botoesNavegacao]
+    })
+
+    const resposta = respostaInicial
+    
+    // Collector para os botões
+    const collector = resposta.createMessageComponentCollector({
+      componentType: ComponentType.Button,
+      time: 300000 // 5 minutos
+    })
+    
+    collector.on('collect', async (interaction) => {
+      // Verifica se quem clicou no botão é um administrador autorizado
+      if (!BOT_ADMIN_DISCORD_USERS_ID.includes(interaction.user.id)) {
+        await interaction.reply({
+          content: `${obterEmoji("errado")} Apenas administradores autorizados podem usar estes botões.`,
+          flags: MessageFlags.Ephemeral
+        })
+        return
+      }
+      
+      const tipoLog = interaction.customId.replace('logs_', '')
+      const resultadoNavegacao = await lerArquivosLog(tipoLog)
+      
+      if (!resultadoNavegacao.success) {
+        await interaction.reply({
+          content: `${obterEmoji("errado")} Erro ao carregar logs: ${resultadoNavegacao.error}`,
+          flags: MessageFlags.Ephemeral
+        })
+        return
+      }
+      
+      const embedAtualizado = formatarLogsParaEmbed(
+        resultadoNavegacao.logs, 
+        tipoLog, 
+        resultadoNavegacao.arquivo, 
+        resultadoNavegacao.total
+      )
+      
+      await interaction.update({
+        embeds: [embedAtualizado],
+        components: [botoesNavegacao]
+      })
+    })
+    
+    collector.on('end', () => {
+      // Remove os botões quando o collector expira
+      resposta.edit({
+        components: []
+      }).catch(() => {}) // Ignora erros se a mensagem já foi deletada
+    })
+    
+    // Log da execução bem-sucedida
+    logger.info("✅ Comando de logs executado com sucesso:", {
+      usuario: {
+        id: message.author.id,
+        username: message.author.username,
+        tag: message.author.tag
+      },
+      servidor: {
+        id: message.guild?.id,
+        nome: message.guild?.name
+      },
+      canal: {
+        id: message.channel.id,
+        nome: message.channel.name
+      },
+      logsEncontrados: resultado.total,
+      arquivo: resultado.arquivo,
+      timestamp: new Date().toISOString(),
+      categoria: 'discord_comando_logs',
+      operacao: 'logs_consultados_sucesso'
+    })
+    
+  } catch (error) {
+    logger.error("❌ Erro ao processar comando de logs:", {
+      erro: error.message,
+      stack: error.stack,
+      usuario: {
+        id: message.author?.id,
+        username: message.author?.username,
+        tag: message.author?.tag
+      },
+      mensagem: message?.content,
+      timestamp: new Date().toISOString(),
+      categoria: 'discord_comando_logs',
+      operacao: 'erro_processar_comando_logs'
+    })
+    
+    try {
+      await message.reply({
+        content: `${obterEmoji("errado")} Ocorreu um erro interno ao processar o comando de logs.`,
+        flags: MessageFlags.Ephemeral
+      })
+    } catch {
+      // Ignora erros de resposta
+    }
+  }
+})
+
 // Evento: Log de erros
 client.on("error", (error) => {
-  console.error("❌ Erro do cliente Discord:", error.message)
+  logger.error("❌ Erro do cliente Discord:", {
+    erro: error.message,
+    stack: error.stack,
+    name: error.name,
+    code: error.code,
+    timestamp: new Date().toISOString(),
+    categoria: 'discord_cliente_erro',
+    operacao: 'cliente_discord_erro'
+  })
 })
 
 // Evento: Bot desconectado
 client.on("disconnect", () => {
-  console.log("⚠️ Bot desconectado do Discord")
+  logger.warn("⚠️ Bot desconectado do Discord", {
+    evento: 'disconnect',
+    timestamp: new Date().toISOString(),
+    categoria: 'discord_conexao',
+    operacao: 'bot_desconectado',
+    status: 'desconectado'
+  })
 })
 
 // Evento: Bot reconectado
 client.on("reconnecting", () => {
-  console.log("🔄 Reconectando ao Discord...")
+  logger.info("🔄 Reconectando ao Discord...", {
+    evento: 'reconnecting',
+    timestamp: new Date().toISOString(),
+    categoria: 'discord_conexao',
+    operacao: 'bot_reconectando',
+    status: 'reconectando'
+  })
 })
 
 // Tratamento de erros não capturados
 process.on("unhandledRejection", (reason, promise) => {
-  console.error("❌ Unhandled Rejection at:", promise, "reason:", reason)
+  logger.error("❌ Unhandled Rejection em:", {
+    promise: promise,
+    reason: reason,
+    stack: reason?.stack,
+    timestamp: new Date().toISOString(),
+    categoria: 'process_erro_critico',
+    operacao: 'unhandled_rejection',
+    tipo_erro: 'unhandled_rejection'
+  })
 })
 
 process.on("uncaughtException", (error) => {
-  console.error("❌ Uncaught Exception:", error.message)
+  logger.error("❌ Uncaught Exception:", {
+    erro: error.message,
+    stack: error.stack,
+    name: error.name,
+    timestamp: new Date().toISOString(),
+    categoria: 'process_erro_critico',
+    operacao: 'uncaught_exception',
+    tipo_erro: 'uncaught_exception'
+  })
   process.exit(1)
 })
 
 // Encerramento por pedido de shutdown
 process.on("SIGINT", () => {
-  console.log("🛑 Recebido SIGINT. Encerrando bot...")
+  logger.info("🛑 Recebido SIGINT. Encerrando bot...", {
+    sinal: 'SIGINT',
+    timestamp: new Date().toISOString(),
+    categoria: 'process_lifecycle',
+    operacao: 'shutdown_graceful',
+    motivo: 'SIGINT_recebido'
+  })
   client.destroy()
   process.exit(0)
 })
 
 process.on("SIGTERM", () => {
-  console.log("🛑 Recebido SIGTERM. Encerrando bot...")
+  logger.info("🛑 Recebido SIGTERM. Encerrando bot...", {
+    sinal: 'SIGTERM',
+    timestamp: new Date().toISOString(),
+    categoria: 'process_lifecycle',
+    operacao: 'shutdown_graceful',
+    motivo: 'SIGTERM_recebido'
+  })
   client.destroy()
   process.exit(0)
 })

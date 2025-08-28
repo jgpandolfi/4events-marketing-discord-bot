@@ -9,6 +9,37 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 ### Em Desenvolvimento
 - Funcionalidades futuras serão listadas aqui
 
+## [1.0.9] - 2025-08-28
+
+### ✨ Adicionado
+- **Sistema de Logging Avançado com Winston**: Implementado sistema completo de logs estruturados
+  - **Logs rotativos diários**: Arquivos de log organizados por data com rotação automática
+  - **Categorização por tipo**: Logs separados para comandos, erros, exceções e rejeições
+  - **Níveis de log configuráveis**: Suporte a diferentes níveis (info, warn, error, debug)
+  - **Formato JSON estruturado**: Logs em formato JSON para melhor análise e filtragem
+  - **Sanitização automática**: Remoção automática de dados sensíveis (tokens, senhas)
+  - **Retenção inteligente**: Arquivos compactados automaticamente com política de retenção
+  - **Logging de performance**: Métricas detalhadas de operações e tempos de resposta
+
+- **Comando de Logs via Menção**: Sistema oculto para administradores acessarem logs do sistema
+  - **Acesso restrito**: Apenas usuários autorizados podem consultar logs pelo Discord
+  - **Interface interativa**: Botões para navegar entre diferentes tipos de logs
+
+### 🔧 Modificado
+- **Sistema de Logging Avançado e Global**: Substituído sistema básico por Winston com configuração profissional seguindo boas práticas do desenvolvimento moderno
+  - Logs estruturados em JSON com metadados completos
+  - Separação de transports por tipo e criticidade de log
+  - Configuração de retenção e compactação automática
+- **Tratamento de Erros**: Aprimorado para capturar exceções não tratadas e promises rejeitadas
+- **Logs de Comandos**: Implementado tracking detalhado de todas as interações dos usuários
+- **Variáveis de Ambiente**: Adicionada validação obrigatória para `BOT_ADMIN_DISCORD_USERS_ID`, variável para acesso a comandos restritos apenas a administradores
+
+### 📚 Técnico
+- **Winston Logger**: Configuração completa com múltiplos transports e formatação personalizada
+- **Daily Rotate File**: Implementação de rotação diária de arquivos de log
+- **Structured Logging**: Logs estruturados com metadados consistentes para análise
+- **Error Handling**: Captura abrangente de erros não tratados em nível de processo
+
 ## [1.0.8] - 2025-08-16
 
 ### ✨ Adicionado

@@ -1,20 +1,22 @@
 {
   "name": "4events-bot",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "description": "",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
-  "author": "",
+  "author": "Jota / José Guilherme Pandolfi",
   "license": "ISC",
   "type": "module",
   "dependencies": {
     "discord.js": "^14.21.0",
     "dotenv": "^17.2.0",
-    "node-fetch": "^3.3.2"
+    "node-fetch": "^3.3.2",
+    "winston": "^3.17.0",
+    "winston-daily-rotate-file": "^5.0.0"
   },
-"start": "node src/index.js",
-"dev": "nodemon src/index.js"
+  "start": "node src/index.js",
+  "dev": "nodemon src/index.js"
 }
