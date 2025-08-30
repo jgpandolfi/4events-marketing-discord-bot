@@ -25,6 +25,7 @@ Bot desenvolvido para automatizar e facilitar os processo de solicitação de ta
 - **Resposta com link**: Sempre que possível retorna mensagens com URLs diretas para os sistemas integrados
 - **Sistema de Logs Avançado com Winston**: Logging estruturado avançado com categorização, retenção automática, compressão automática e rotação diária para monitoramento e debugging
 - **Robustez Avançada**: Resistência a falhas temporárias do N8N com backoff progressivo e sistema de retries
+- **Discord Components V2**: O bot utiliza a mais recente tecnologia para criação de conteúdo e interfaces do Discord
 
 ## 🚀 Como Usar
 
@@ -139,7 +140,7 @@ O bot conta com um **sistema automático de retry**, para os comandos `/makertin
 ## 🛠️ Tecnologias Utilizadas
 
 - **Node.js** - Runtime JavaScript
-- **Discord.js** - Biblioteca para interação com Discord API
+- **Discord.js v14** - Biblioteca para interação com Discord API
 - **N8N** - Automação de workflows
 - **Microsoft Clarity Data Export API** - Obtenção de dados e estatísticas de CRO
 - **Winston + Winston Daily Rotate File** - Sistema de logging estruturado com rotação diária de arquivos
@@ -158,5 +159,5 @@ Bot criado para otimizar o fluxo de trabalho da equipe de marketing da 4.events.
 ---
 
 **Status**: ✅ Ativo e funcionando  
-**Versão**: 1.0.9
+**Versão**: 1.0.10
 **Última atualização**: Agosto 2025

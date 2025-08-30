@@ -9,6 +9,41 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 ### Em Desenvolvimento
 - Funcionalidades futuras serão listadas aqui
 
+## [1.0.10] - 2025-08-30
+
+### ✨ Adicionado
+- **Interface Moderna com Components V2**: Migração completa de respostas embeds antigas para os novos Components V2 do Discord.js
+  - **ContainerBuilder**: Implementação de containers estruturados para organização visual aprimorada
+  - **TextDisplayBuilder**: Componentes de texto mais flexíveis e bem formatados
+  - **SeparatorBuilder**: Separadores visuais com espaçamento configurável para melhor organização
+  - **SectionBuilder**: Seções organizadas para conteúdo estruturado
+  - **Cores personalizadas**: Aplicação da cor laranja oficial da 4.events (0xff4f00) em todos os containers
+
+### 🔧 Modificado
+- **Interface Completa de Todos os Comandos**: Substituição das antigas embeds por Components V2
+  - **Comando `/midiakit`**: Layout estruturado com seções bem definidas para cada categoria de material
+  - **Comando `/apresentações`**: Interface limpa com avisos destacados sobre uso interno
+  - **Comando `/modelos`**: Apresentação organizada com separadores e avisos de confidencialidade
+  - **Comando `/help`**: Sistema de ajuda completamente redesenhado com navegação por containers
+  - **Comando `/ping`**: Resposta simples em container moderno
+  - **Sistema de Logs**: Interface administrativa renovada com containers para melhor visualização dos logs
+
+- **Sistema de Ajuda Interativo**: Reformulação completa do comando `/help`
+  - **Navegação por containers**: Menu principal com select dropdown para categorias
+  - **Botão "Voltar"**: Implementação de botões para navegação fluida entre seções
+  - **Documentação estruturada**: Cada comando possui sua própria seção detalhada
+  - **Organização visual**: Separadores e cores para melhor experiência de leitura
+
+- **Comando Oculto de Logs Administrativo**: Modernização da interface de logs para administradores
+  - **Containers organizados**: Visualização estruturada dos logs por categoria
+  - **Select menu interativo**: Navegação entre diferentes tipos de logs
+  - **Apresentação melhorada**: Formatação mais clara dos dados de log
+
+### 📚 Técnico
+- **Discord.js Components V2**: Implementação completa dos novos componentes de interface
+- **MessageFlags.IsComponentsV2**: Aplicação da nova flag para compatibilidade com Components V2
+- **Código Limpo**: Refatoração para uso consistente dos novos builders de componentes
+
 ## [1.0.9] - 2025-08-28
 
 ### ✨ Adicionado

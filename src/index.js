@@ -9,7 +9,14 @@ import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  ComponentType
+  ComponentType,
+  StringSelectMenuBuilder,
+  SelectMenuOptionBuilder,
+  ContainerBuilder,
+  TextDisplayBuilder,
+  SectionBuilder,
+  SeparatorBuilder,
+  SeparatorSpacingSize
 } from "discord.js"
 import fs from "fs"
 import path from "path"
@@ -379,62 +386,186 @@ async function lerArquivosLog(tipoLog = 'geral') {
   }
 }
 
-// Função para formatar logs para exibição
-function formatarLogsParaEmbed(logs, tipoLog, nomeArquivo, total) {
-  if (!logs || logs.length === 0) {
-    return {
-      title: `${obterEmoji("info")} Logs do sistema - ${tipoLog.toUpperCase()}`,
-      description: "Nenhum log encontrado para hoje",
-      color: 0xff4f00
+// Função para criar container inicial do comando de logs com Components V2
+function criarContainerInicialLogs(categoriaSelecionada = 'geral', resultadoLogs = null) {
+  const dropdown = new StringSelectMenuBuilder()
+    .setCustomId('select_log_category')
+    .setPlaceholder('🔍 Selecione a categoria de logs')
+    .addOptions([
+      {
+        label: '🌎 Todos',
+        description: 'Exibe todos os logs',
+        value: 'geral',
+        default: categoriaSelecionada === 'geral'
+      },
+      {
+        label: '❌ Apenas erros',
+        description: 'Exibe somente erros',
+        value: 'error',
+        default: categoriaSelecionada === 'error'
+      },
+      {
+        label: '⌨️ Apenas comandos',
+        description: 'Exibe logs de comandos',
+        value: 'commands',
+        default: categoriaSelecionada === 'commands'
+      },
+      {
+        label: '🚨 Apenas exceções',
+        description: 'Exibe logs de exceções',
+        value: 'exceptions',
+        default: categoriaSelecionada === 'exceptions'
+      },
+    ])
+
+  const container = new ContainerBuilder()
+    .setAccentColor(16731904) // Cor laranja da 4.events (0xff4f00)
+    .addTextDisplayComponents(
+      new TextDisplayBuilder().setContent(`### ${obterEmoji("search")} Logs do sistema`),
+    )
+    .addActionRowComponents(
+      new ActionRowBuilder().addComponents(dropdown)
+    )
+    .addTextDisplayComponents(
+      new TextDisplayBuilder().setContent("☝️ Selecione no menu acima a categoria de logs que deseja visualizar."),
+    )
+
+  // Se temos dados de logs, exibir informações
+  if (resultadoLogs && resultadoLogs.success) {
+    container.addSeparatorComponents(
+      new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
+    )
+    .addTextDisplayComponents(
+      new TextDisplayBuilder().setContent(`### ${obterEmoji("info")} ${categoriaSelecionada.toUpperCase()}`),
+    )
+    .addTextDisplayComponents(
+      new TextDisplayBuilder().setContent(`**Arquivo:** \`${resultadoLogs.arquivo}\`\n**Total de logs hoje:** \`${resultadoLogs.total}\``),
+    )
+
+    // Formatar logs para exibição
+    if (resultadoLogs.logs && resultadoLogs.logs.length > 0) {
+      const logsTexto = formatarLogsParaContainer(resultadoLogs.logs)
+      container.addTextDisplayComponents(
+        new TextDisplayBuilder().setContent("**Últimos 10 registros:**"),
+      )
+      .addTextDisplayComponents(
+        new TextDisplayBuilder().setContent(logsTexto),
+      )
+    } else {
+      container.addTextDisplayComponents(
+        new TextDisplayBuilder().setContent("Nenhum log encontrado para esta categoria hoje."),
+      )
     }
+  } else if (resultadoLogs && !resultadoLogs.success) {
+    container.addSeparatorComponents(
+      new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
+    )
+    .addTextDisplayComponents(
+      new TextDisplayBuilder().setContent(`${obterEmoji("errado")} **Erro:** ${resultadoLogs.error}`),
+    )
+  }
+
+  return [container]
+}
+
+// Função para formatar logs para exibição em containers V2
+function formatarLogsParaContainer(logs) {
+  if (!logs || logs.length === 0) {
+    return "Nenhum log encontrado."
   }
   
-  const logsTexto = logs.map((log, index) => {
+  const logsFormatados = logs.map((log, index) => {
     const timestamp = log.timestamp ? new Date(log.timestamp).toLocaleTimeString('pt-BR') : 'N/A'
     const level = log.level || 'info'
-    const message = (log.message || 'N/A').substring(0, 100)
+    const message = (log.message || 'N/A').substring(0, 120)
     
     const emoji = level === 'error' ? obterEmoji("errado") : 
                   level === 'warn' ? obterEmoji("warn") : 
                   obterEmoji("info")
     
-    return `${emoji} \`${timestamp} ${level.toUpperCase()} - ${message}${message.length > 100 ? '...' : ''}\``
+    return `${emoji} \`${timestamp} [${level.toUpperCase()}] ${message}${message.length > 120 ? '...' : ''}\``
   }).join('\n')
   
-  return {
-    title: `${obterEmoji("search")} Logs do sistema - ${tipoLog.toUpperCase()}`,
-    description: `**Arquivo:** \`${nomeArquivo}\`\n**Total de logs hoje:** \`${total}\`\n\n**Últimos 10 registros:**\n${logsTexto}`,
-    color: 0xff4f00,
-    footer: {
-      text: "4.events Marketing Bot • Sistema de logs",
-    },
-    timestamp: new Date().toISOString()
-  }
+  return logsFormatados
 }
 
-// Função para criar botões de navegação dos logs
-function criarBotoesLogs() {
-  const botaoGeral = new ButtonBuilder()
-    .setCustomId('logs_geral')
-    .setLabel('🌎 Todos')
-    .setStyle(ButtonStyle.Primary)
-  
-  const botaoErros = new ButtonBuilder()
-    .setCustomId('logs_error')
-    .setLabel('❌ Apenas erros')
-    .setStyle(ButtonStyle.Danger)
-  
-  const botaoComandos = new ButtonBuilder()
-    .setCustomId('logs_commands')
-    .setLabel('⌨️ Apenas de comandos')
-    .setStyle(ButtonStyle.Success)
-  
-  const botaoExcecoes = new ButtonBuilder()
-    .setCustomId('logs_exceptions')
-    .setLabel('🚨 Apenas exceções')
-    .setStyle(ButtonStyle.Secondary)
-  
-  return new ActionRowBuilder().addComponents(botaoGeral, botaoErros, botaoComandos, botaoExcecoes)
+// Função auxiliar para criar o container inicial do comando /help
+function criarContainerInicialHelp() {
+  return [
+    new ContainerBuilder()
+      .setAccentColor(16731904) // Cor laranja da 4.events (0xff4f00)
+      .addTextDisplayComponents(
+        new TextDisplayBuilder().setContent(`### ${obterEmoji("ajuda")} Central de ajuda`),
+      )
+      .addTextDisplayComponents(
+        new TextDisplayBuilder().setContent("**Bot para criação de solicitações de tarefas de marketing, registro de parcerias e análise de performance.**\n\nAlém dessas funcionalidades principais, também foram implementadas funcionalidades para auxiliar em demais tarefas do dia a dia."),
+      )
+      .addSeparatorComponents(
+        new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
+      )
+      .addTextDisplayComponents(
+        new TextDisplayBuilder().setContent(`### ${obterEmoji("config")} Selecione o que você precisa`),
+      )
+      .addTextDisplayComponents(
+        new TextDisplayBuilder().setContent("👇 Escolha uma das opções abaixo para obter ajuda específica sobre cada funcionalidade do bot:"),
+      )
+      .addActionRowComponents(
+        new ActionRowBuilder()
+          .addComponents(
+            new StringSelectMenuBuilder()
+              .setCustomId("help_select_menu")
+              .setPlaceholder("🔍 Selecione uma opção de ajuda...")
+              .addOptions(
+                new SelectMenuOptionBuilder()
+                  .setLabel("📋 Visão geral do bot")
+                  .setValue("help_overview")
+                  .setDescription("Informações gerais sobre o bot e suas funcionalidades"),
+                new SelectMenuOptionBuilder()
+                  .setLabel("📋 Comando /marketing")
+                  .setValue("help_marketing")
+                  .setDescription("Como criar solicitações de tarefas de marketing"),
+                new SelectMenuOptionBuilder()
+                  .setLabel("🤝 Comando /parceria")
+                  .setValue("help_parceria")
+                  .setDescription("Como registrar novas parcerias comerciais"),
+                new SelectMenuOptionBuilder()
+                  .setLabel("📊 Comando /cro")
+                  .setValue("help_cro")
+                  .setDescription("Como obter dados de performance e estatísticas"),
+                new SelectMenuOptionBuilder()
+                  .setLabel("🎨 Comando /midiakit")
+                  .setValue("help_midiakit")
+                  .setDescription("Como acessar o mídia kit oficial da 4.events"),
+                new SelectMenuOptionBuilder()
+                  .setLabel("📊 Comando /apresentações")
+                  .setValue("help_apresentacoes")
+                  .setDescription("Como acessar apresentações comerciais oficiais"),
+                new SelectMenuOptionBuilder()
+                  .setLabel("📄 Comando /modelos")
+                  .setValue("help_modelos")
+                  .setDescription("Como acessar modelos de documentos e templates"),
+                new SelectMenuOptionBuilder()
+                  .setLabel("🖼️ Comandos de Imagens")
+                  .setValue("help_images")
+                  .setDescription("Capa LinkedIn e fundo de escritório"),
+                new SelectMenuOptionBuilder()
+                  .setLabel("🏓 Outros Comandos")
+                  .setValue("help_others")
+                  .setDescription("Ping e outras utilidades do bot"),
+                new SelectMenuOptionBuilder()
+                  .setLabel("📅 Formatos de Data")
+                  .setValue("help_dates")
+                  .setDescription("Como usar datas nos comandos do bot"),
+              ),
+        ),
+      )
+      .addSeparatorComponents(
+        new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
+      )
+      .addTextDisplayComponents(
+        new TextDisplayBuilder().setContent(`${obterEmoji("warn")} **Importante:**\n• Use os comandos em qualquer canal do servidor\n• Desenvolvido especificamente para a equipe 4.events\n• Para suporte técnico, entre em contato com os administradores`),
+      ),
+  ];
 }
 
 // Define o comando slash /marketing
@@ -1460,7 +1591,7 @@ client.once("ready", async () => {
 // Evento: Processar interações (comandos slash)
 client.on("interactionCreate", async (interaction) => {
   try {
-        // Handler de Modals - Processar submissão de modals (comandos /marketing e /parceria)
+    // Handler de Modals - Processar submissão de modals (comandos /marketing e /parceria)
     if (interaction.isModalSubmit()) {
       
       // Modal de Marketing (criado pelo comando /marketing)
@@ -1829,6 +1960,434 @@ client.on("interactionCreate", async (interaction) => {
       }
     }
 
+    // Handler para botões
+    if (interaction.isButton()) {
+          // Handlar do botão "Voltar ao menu principal" do comando /help
+          if (interaction.customId === 'help_voltar') {
+            const components = criarContainerInicialHelp();
+
+            await interaction.update({
+              components: components,
+              flags: MessageFlags.IsComponentsV2
+            })
+
+            // Log da ação
+            logger.info("✅ Usuário voltou ao menu principal do help:", {
+              usuario: {
+                username: interaction.user.username,
+                displayName: interaction.member?.displayName || interaction.user.username,
+                id: interaction.user.id,
+                tag: interaction.user.tag
+              },
+              botao: 'help_voltar',
+              timestamp: new Date().toISOString(),
+              categoria: 'discord_help_navegacao',
+              operacao: 'voltar_menu_principal'
+            })
+            
+            return
+          }
+      return // Retorna aqui para evitar processar comandos
+    }
+
+    // Handler para Select Menus
+    if (interaction.isStringSelectMenu()) {
+      // Handler para o select menu do comando /help
+      if (interaction.customId === 'help_select_menu') {
+        const selectedValue = interaction.values[0]
+        let helpContent = []
+
+        switch (selectedValue) {
+          case 'help_overview':
+            helpContent = [
+              new ContainerBuilder()
+                .setAccentColor(16731904)
+                .addTextDisplayComponents(
+                  new TextDisplayBuilder().setContent(`### ${obterEmoji("info")} Visão Geral do Bot`),
+                )
+                .addTextDisplayComponents(
+                  new TextDisplayBuilder().setContent("**Bot para criação de solicitações de tarefas de marketing, registro de parcerias e análise de performance.**\n\nFuncionalidades principais:\n• Criar tarefas de marketing com formulários\n• Registrar parcerias comerciais\n• Obter dados de performance via Microsoft Clarity\n• Acessar materiais oficiais da 4.events"),
+                )
+                .addSeparatorComponents(
+                  new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
+                )
+                .addTextDisplayComponents(
+                  new TextDisplayBuilder().setContent(`### ${obterEmoji("config")} Como Usar\n\n• **Comandos com Modal**: /marketing e /parceria abrem formulários\n• **Comandos diretos**: Demais comandos funcionam imediatamente\n• **Todos os comandos**: Funcionam em qualquer canal do servidor`),
+                )
+                .addSeparatorComponents(
+                  new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
+                )
+                .addActionRowComponents(
+                  new ActionRowBuilder()
+                    .addComponents(
+                      new ButtonBuilder()
+                        .setCustomId('help_voltar')
+                        .setLabel('Voltar ao menu principal')
+                        .setStyle(ButtonStyle.Secondary)
+                    ),
+                )
+            ]
+            break
+
+          case 'help_marketing':
+            helpContent = [
+              new ContainerBuilder()
+                .setAccentColor(16731904)
+                .addTextDisplayComponents(
+                  new TextDisplayBuilder().setContent(`### 📋 Comando /marketing`),
+                )
+                .addTextDisplayComponents(
+                  new TextDisplayBuilder().setContent("**Descrição:** Cria uma nova solicitação de tarefa de marketing\n\n**Como usar:**\n1. Digite `/marketing`\n2. Preencha o formulário popup que será exibido\n3. Clique em 'Enviar'"),
+                )
+                .addSeparatorComponents(
+                  new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
+                )
+                .addTextDisplayComponents(
+                  new TextDisplayBuilder().setContent("**Campos do formulário:**\n• **Nome da tarefa** - Título da tarefa *(máx: 100 caracteres)*\n• **Detalhes** - Descrição detalhada *(máx: 1000 caracteres)*\n• **Prazo** - Data limite no formato **DD/MM/AAAA**"),
+                )
+                .addSeparatorComponents(
+                  new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
+                )
+                .addTextDisplayComponents(
+                  new TextDisplayBuilder().setContent(`${obterEmoji("warn")} **Regras importantes:**\n• Não aceita datas no passado\n• Todos os campos são obrigatórios\n• Sistema automático de retry em caso de falhas\n• Alerta automático enviado ao canal de marketing`),
+                )
+                .addSeparatorComponents(
+                  new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
+                )
+                .addActionRowComponents(
+                  new ActionRowBuilder()
+                    .addComponents(
+                      new ButtonBuilder()
+                        .setCustomId('help_voltar')
+                        .setLabel('Voltar ao menu principal')
+                        .setStyle(ButtonStyle.Secondary)
+                    ),
+                )
+            ]
+            break
+
+          case 'help_parceria':
+            helpContent = [
+              new ContainerBuilder()
+                .setAccentColor(16731904)
+                .addTextDisplayComponents(
+                  new TextDisplayBuilder().setContent(`### 🤝 Comando /parceria`),
+                )
+                .addTextDisplayComponents(
+                  new TextDisplayBuilder().setContent("**Descrição:** Registra uma nova parceria comercial\n\n**Como usar:**\n1. Digite `/parceria`\n2. Preencha o formulário popup que será exibido\n3. Clique em 'Enviar'"),
+                )
+                .addSeparatorComponents(
+                  new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
+                )
+                .addTextDisplayComponents(
+                  new TextDisplayBuilder().setContent("**Campos do formulário:**\n• **URL do card** - URL do card no sistema *(máx: 500 caracteres)*\n• **Data do evento** - Data do evento no formato **DD/MM/AAAA**"),
+                )
+                .addSeparatorComponents(
+                  new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
+                )
+                .addTextDisplayComponents(
+                  new TextDisplayBuilder().setContent(`${obterEmoji("warn")} **Regras importantes:**\n• Aceita datas passadas (eventos já realizados)\n• URLs devem ser dos domínios Pipe.run ou 4.works\n• Notificação automática enviada ao canal de parcerias`),
+                )
+                .addSeparatorComponents(
+                  new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
+                )
+                .addActionRowComponents(
+                  new ActionRowBuilder()
+                    .addComponents(
+                      new ButtonBuilder()
+                        .setCustomId('help_voltar')
+                        .setLabel('Voltar ao menu principal')
+                        .setStyle(ButtonStyle.Secondary)
+                    ),
+                )
+            ]
+            break
+
+          case 'help_cro':
+            helpContent = [
+              new ContainerBuilder()
+                .setAccentColor(16731904)
+                .addTextDisplayComponents(
+                  new TextDisplayBuilder().setContent(`### 📊 Comando /cro`),
+                )
+                .addTextDisplayComponents(
+                  new TextDisplayBuilder().setContent("**Descrição:** Obtém dados de performance e estatísticas via Microsoft Clarity\n\n**Parâmetros (opcionais):**\n• `data_desejada` - Data para consulta no formato **DD/MM/AAAA** *(padrão: hoje)*\n• `final_da_url_desejada` - Final da URL para análise *(padrão: dados consolidados)*"),
+                )
+                .addSeparatorComponents(
+                  new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
+                )
+                .addTextDisplayComponents(
+                  new TextDisplayBuilder().setContent("**Exemplos de uso:**\n• `/cro` - Dados consolidados de hoje\n• `/cro data_desejada:20/07/2025` - Dados de data específica\n• `/cro final_da_url_desejada:credenciamento` - Página específica\n• `/cro data_desejada:20/07/2025 final_da_url_desejada:credenciamento` - Combinado"),
+                )
+                .addSeparatorComponents(
+                  new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
+                )
+                .addTextDisplayComponents(
+                  new TextDisplayBuilder().setContent(`${obterEmoji("warn")} **Importante:**\n• Não aceita datas futuras\n• Dados obtidos do Microsoft Clarity\n• Métricas incluem sessões, usuários únicos e sistemas operacionais`),
+                )
+                .addSeparatorComponents(
+                  new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
+                )
+                .addActionRowComponents(
+                  new ActionRowBuilder()
+                    .addComponents(
+                      new ButtonBuilder()
+                        .setCustomId('help_voltar')
+                        .setLabel('Voltar ao menu principal')
+                        .setStyle(ButtonStyle.Secondary)
+                    ),
+                )
+            ]
+            break
+
+          case 'help_midiakit':
+            helpContent = [
+              new ContainerBuilder()
+                .setAccentColor(16731904)
+                .addTextDisplayComponents(
+                  new TextDisplayBuilder().setContent(`### 🎨 Comando /midiakit`),
+                )
+                .addTextDisplayComponents(
+                  new TextDisplayBuilder().setContent("**Descrição:** Acessa o mídia kit oficial da 4.events\n\n**Como usar:** Digite `/midiakit` para visualizar todos os links dos materiais visuais"),
+                )
+                .addSeparatorComponents(
+                  new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
+                )
+                .addTextDisplayComponents(
+                  new TextDisplayBuilder().setContent("**Conteúdo disponível:**\n• **Logos oficiais** - Versões horizontal, profile, negativo\n• **Ícones de produtos** - Ícones de funcionalidades dos apps\n• **Materiais audiovisuais** - Logos animados, intros, elementos para vídeos"),
+                )
+                .addSeparatorComponents(
+                  new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
+                )
+                .addTextDisplayComponents(
+                  new TextDisplayBuilder().setContent(`${obterEmoji("warn")} **Diretrizes:**\n• Mantenha as proporções originais dos logos\n• Respeite as cores oficiais da marca\n• Para dúvidas sobre uso, consulte o time de marketing`),
+                )
+                .addSeparatorComponents(
+                  new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
+                )
+                .addActionRowComponents(
+                  new ActionRowBuilder()
+                    .addComponents(
+                      new ButtonBuilder()
+                        .setCustomId('help_voltar')
+                        .setLabel('Voltar ao menu principal')
+                        .setStyle(ButtonStyle.Secondary)
+                    ),
+                )
+            ]
+            break
+
+          case 'help_apresentacoes':
+            helpContent = [
+              new ContainerBuilder()
+                .setAccentColor(16731904)
+                .addTextDisplayComponents(
+                  new TextDisplayBuilder().setContent(`### 📊 Comando /apresentações`),
+                )
+                .addTextDisplayComponents(
+                  new TextDisplayBuilder().setContent("**Descrição:** Acessa as apresentações comerciais oficiais da 4.events\n\n**Como usar:** Digite `/apresentações` para acessar apresentações em PDF e editáveis"),
+                )
+                .addSeparatorComponents(
+                  new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
+                )
+                .addTextDisplayComponents(
+                  new TextDisplayBuilder().setContent("**Conteúdo disponível:**\n• Apresentações comerciais\n• Apresentações técnicas\n• Materiais de vendas\n• Templates editáveis online"),
+                )
+                .addSeparatorComponents(
+                  new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
+                )
+                .addTextDisplayComponents(
+                  new TextDisplayBuilder().setContent(`${obterEmoji("warn")} **IMPORTANTE:**\n• **USO INTERNO EXCLUSIVO** - não compartilhar externamente\n• Material confidencial da 4.events\n• Acesso restrito à equipe autorizada`),
+                )
+                .addSeparatorComponents(
+                  new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
+                )
+                .addActionRowComponents(
+                  new ActionRowBuilder()
+                    .addComponents(
+                      new ButtonBuilder()
+                        .setCustomId('help_voltar')
+                        .setLabel('Voltar ao menu principal')
+                        .setStyle(ButtonStyle.Secondary)
+                    ),
+                )
+            ]
+            break
+
+          case 'help_modelos':
+            helpContent = [
+              new ContainerBuilder()
+                .setAccentColor(16731904)
+                .addTextDisplayComponents(
+                  new TextDisplayBuilder().setContent(`### 📄 Comando /modelos`),
+                )
+                .addTextDisplayComponents(
+                  new TextDisplayBuilder().setContent("**Descrição:** Acessa modelos de documentos e templates com branding da 4.events\n\n**Como usar:** Digite `/modelos` para acessar templates de documentos"),
+                )
+                .addSeparatorComponents(
+                  new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
+                )
+                .addTextDisplayComponents(
+                  new TextDisplayBuilder().setContent("**Conteúdo disponível:**\n• Documentos timbrados\n• Modelos de contratos\n• Templates de propostas\n• Modelos de relatórios\n• Materiais com identidade visual"),
+                )
+                .addSeparatorComponents(
+                  new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
+                )
+                .addTextDisplayComponents(
+                  new TextDisplayBuilder().setContent(`${obterEmoji("warn")} **IMPORTANTE:**\n• **USO INTERNO EXCLUSIVO** - não compartilhar externamente\n• Mantenha sempre a identidade visual padrão\n• Material confidencial da 4.events`),
+                )
+                .addSeparatorComponents(
+                  new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
+                )
+                .addActionRowComponents(
+                  new ActionRowBuilder()
+                    .addComponents(
+                      new ButtonBuilder()
+                        .setCustomId('help_voltar')
+                        .setLabel('Voltar ao menu principal')
+                        .setStyle(ButtonStyle.Secondary)
+                    ),
+                )
+            ]
+            break
+
+          case 'help_images':
+            helpContent = [
+              new ContainerBuilder()
+                .setAccentColor(16731904)
+                .addTextDisplayComponents(
+                  new TextDisplayBuilder().setContent(`### 🖼️ Comandos de Imagens`),
+                )
+                .addSeparatorComponents(
+                  new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
+                )
+                .addTextDisplayComponents(
+                  new TextDisplayBuilder().setContent("**🖼️ /capa-linkedin**\n• Acessa a capa oficial da 4.events para LinkedIn\n• Para uso em perfis dos colaboradores\n• Comando: `/capa-linkedin`"),
+                )
+                .addSeparatorComponents(
+                  new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
+                )
+                .addTextDisplayComponents(
+                  new TextDisplayBuilder().setContent("**🖥️ /fundo-escritorio**\n• Acessa o papel de parede oficial da 4.events\n• Para área de trabalho e webcam em reuniões\n• Ideal para home office\n• Comando: `/fundo-escritorio`"),
+                )
+                .addSeparatorComponents(
+                  new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
+                )
+                .addActionRowComponents(
+                  new ActionRowBuilder()
+                    .addComponents(
+                      new ButtonBuilder()
+                        .setCustomId('help_voltar')
+                        .setLabel('Voltar ao menu principal')
+                        .setStyle(ButtonStyle.Secondary)
+                    ),
+                )
+            ]
+            break
+
+          case 'help_others':
+            helpContent = [
+              new ContainerBuilder()
+                .setAccentColor(16731904)
+                .addTextDisplayComponents(
+                  new TextDisplayBuilder().setContent(`### 🏓 Outros Comandos`),
+                )
+                .addSeparatorComponents(
+                  new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
+                )
+                .addTextDisplayComponents(
+                  new TextDisplayBuilder().setContent("**🏓 /ping**\n• Verifica a conectividade e latência do bot\n• Mostra o status de funcionamento\n• Comando: `/ping`"),
+                )
+                .addSeparatorComponents(
+                  new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
+                )
+                .addTextDisplayComponents(
+                  new TextDisplayBuilder().setContent("**❓ /help**\n• Exibe esta central de ajuda\n• Navegação interativa por categorias\n• Comando: `/help`"),
+                )
+                .addSeparatorComponents(
+                  new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
+                )
+                .addActionRowComponents(
+                  new ActionRowBuilder()
+                    .addComponents(
+                      new ButtonBuilder()
+                        .setCustomId('help_voltar')
+                        .setLabel('Voltar ao menu principal')
+                        .setStyle(ButtonStyle.Secondary)
+                    ),
+                )
+            ]
+            break
+
+          case 'help_dates':
+            helpContent = [
+              new ContainerBuilder()
+                .setAccentColor(16731904)
+                .addTextDisplayComponents(
+                  new TextDisplayBuilder().setContent(`### 📅 Formatos de Data Aceitos`),
+                )
+                .addSeparatorComponents(
+                  new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
+                )
+                .addTextDisplayComponents(
+                  new TextDisplayBuilder().setContent(`**${obterEmoji("certo")} Exemplos Válidos:**\n• \`25/12/2025\` - Formato padrão\n• \`5/3/25\` - Dia e mês com 1 dígito, ano com 2\n• \`15/3/25\` - Dia com 2 dígitos, mês com 1\n• \`5/03/2025\` - Mês com zero à esquerda\n• \`05/12/25\` - Dia com zero à esquerda`),
+                )
+                .addSeparatorComponents(
+                  new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
+                )
+                .addTextDisplayComponents(
+                  new TextDisplayBuilder().setContent(`**${obterEmoji("warn")} Regras por Comando:**\n• **/marketing**: Não aceita datas no passado\n• **/parceria**: Aceita datas passadas\n• **/cro**: Não aceita datas futuras\n• Use apenas números e barras \`/\` em datas\n• Anos de 2 dígitos assumem 20XX`),
+                )
+                .addSeparatorComponents(
+                  new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
+                )
+                .addActionRowComponents(
+                  new ActionRowBuilder()
+                    .addComponents(
+                      new ButtonBuilder()
+                        .setCustomId('help_voltar')
+                        .setLabel('Voltar ao menu principal')
+                        .setStyle(ButtonStyle.Secondary)
+                    ),
+                )
+            ]
+            break
+
+          default:
+            helpContent = [
+              new ContainerBuilder()
+                .setAccentColor(16731904)
+                .addTextDisplayComponents(
+                  new TextDisplayBuilder().setContent(`### ${obterEmoji("errado")} Opção não encontrada`),
+                )
+                .addTextDisplayComponents(
+                  new TextDisplayBuilder().setContent("Selecione uma opção válida do menu acima."),
+                )
+            ]
+        }
+
+        await interaction.update({
+          components: helpContent,
+          flags: MessageFlags.IsComponentsV2
+        })
+
+        // Log da seleção
+        logger.info("✅ Opção de ajuda selecionada:", {
+          usuario: {
+            username: interaction.user.username,
+            displayName: interaction.member?.displayName || interaction.user.username,
+            id: interaction.user.id,
+            tag: interaction.user.tag
+          },
+          opcaoSelecionada: selectedValue,
+          timestamp: new Date().toISOString(),
+          categoria: 'discord_help_navegacao',
+          operacao: 'opcao_help_selecionada'
+        })
+      }
+      return
+    }
+
     if (!interaction.isCommand()) return
 
     // Comando /marketing
@@ -2157,105 +2716,134 @@ client.on("interactionCreate", async (interaction) => {
 
     // Comando /midiakit
     else if (interaction.commandName === "midiakit") {
-      const embed = {
-        color: 0xff4f00,
-        title: `${obterEmoji("info")} Mídia Kit Oficial 4.events`,
-        description: "**Acesse todos os materiais visuais e audiovisuais oficiais da 4.events**\n" +
-                     "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-        fields: [
-          {
-            name: `${obterEmoji("foto")} **Logos Oficiais da 4.events**`,
-            value: "**📁 [CLIQUE AQUI para acessar a pasta no Google Drive](https://drive.google.com/drive/folders/1N24emGD_ZnB4Eu88UXfdNhZVnY8-uul0?usp=sharing)**\n" +
-                   "• Logotipos em diferentes versões (horizontal, profile, negativo)\n" +
-                   "• Diferentes formatos em alta resolução\n" +
-                   "• Versões para fundo claro e escuro\n",
-            inline: false,
-          },
-          {
-            name: `${obterEmoji("safira")} **Ícones dos Produtos e Features**`,
-            value: "**📁 [CLIQUE AQUI para acessar a pasta no Google Drive](https://drive.google.com/drive/folders/1TbxLIiJFNF9PdjtuzUCBmjc9rIONoqZT?usp=sharing)**\n" +
-                   "• Ícones de todas as funcionalidades (features) dos apps 4.events\n",
-            inline: false,
-          },
-          {
-            name: `${obterEmoji("youtube")} **Materiais Audiovisuais e Animações**`,
-            value: "**📁 [CLIQUE AQUI para acessar a pasta no Google Drive](https://drive.google.com/drive/folders/1QVlCzr8clpLih7vUEEzjVD6Ey53xeSyw?usp=sharing)**\n" +
-                   "• Logos animados\n" +
-                   "• Intros e outros materiais para vídeos\n" +
-                   "• Elementos visuais em movimento para apresentações\n" +
-                   "• Materiais para redes sociais e campanhas digitais",
-            inline: false,
-          },
-          {
-            name: `${obterEmoji("warn")} **Diretrizes de Uso**`,
-            value: "• **Mantenha as proporções originais dos logos**\n" +
-                   "• **Respeite as cores oficiais da marca**\n" +
-                   "• **Para dúvidas sobre uso, consulte o time de marketing**",
-            inline: false,
-          }
-        ],
-        footer: {
-          text: "4.events Marketing Bot • Mídia Kit Oficial",
-        },
-        timestamp: new Date().toISOString(),
-      }
+        // Criar o container com os novos components V2
+        const components = [
+            new ContainerBuilder()
+                .setAccentColor(16731904) // Cor laranja da 4.events (0xff4f00)
+                .addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent(`### ${obterEmoji("info")} Mídia Kit Oficial 4.events`),
+                )
+                .addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent("Acesse todos os materiais visuais e audiovisuais oficiais da 4.events"),
+                )
+                .addSeparatorComponents(
+                    new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
+                )
+                .addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent(`### ${obterEmoji("foto")} Logos oficiais da 4.events`),
+                )
+                .addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent("• Logos em diferentes versões (horizontal, profile, negativo, etc)\n• Diferentes formatos em alta resolução\n• Versões para fundo claro e escuro"),
+                )
+                .addActionRowComponents(
+                    new ActionRowBuilder()
+                        .addComponents(
+                            new ButtonBuilder()
+                                .setStyle(ButtonStyle.Link)
+                                .setLabel("Acessar logos oficiais")
+                                .setURL("https://drive.google.com/drive/folders/1N24emGD_ZnB4Eu88UXfdNhZVnY8-uul0?usp=sharing"),
+                        ),
+                )
+                .addSeparatorComponents(
+                    new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
+                )
+                .addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent(`### ${obterEmoji("safira")} Ícones dos produtos e features`),
+                )
+                .addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent("• Ícones de todas as funcionalidades (features) dos apps 4.events"),
+                )
+                .addActionRowComponents(
+                    new ActionRowBuilder()
+                        .addComponents(
+                            new ButtonBuilder()
+                                .setStyle(ButtonStyle.Link)
+                                .setLabel("Acessar ícones de features")
+                                .setURL("https://drive.google.com/drive/folders/1TbxLIiJFNF9PdjtuzUCBmjc9rIONoqZT?usp=sharing"),
+                        ),
+                )
+                .addSeparatorComponents(
+                    new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
+                )
+                .addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent(`### ${obterEmoji("youtube")} Materiais audiovisuais e animações`),
+                )
+                .addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent("• Logos animados\n• Intros e outros materiais para vídeos\n• Elementos visuais em movimento para apresentações"),
+                )
+                .addActionRowComponents(
+                    new ActionRowBuilder()
+                        .addComponents(
+                            new ButtonBuilder()
+                                .setStyle(ButtonStyle.Link)
+                                .setLabel("Acessar materiais audiovisuais")
+                                .setURL("https://drive.google.com/drive/folders/1QVlCzr8clpLih7vUEEzjVD6Ey53xeSyw?usp=sharing"),
+                        ),
+                )
+                .addSeparatorComponents(
+                    new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
+                )
+                .addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent(`${obterEmoji("warn")} **Importante:**\n• Mantenha as proporções originais dos logos\n• Respeite as cores oficiais da marca\n• Para dúvidas sobre uso, consulte o time de marketing`),
+                ),
+        ];
 
-      await interaction.reply({
-        embeds: [embed],
-      })
+        await interaction.reply({
+            components: components,
+            flags: MessageFlags.IsComponentsV2
+        })
 
-      // Prepara dados do usuário para log
-      const usuario = {
-        username: interaction.user.username,
-        displayName: interaction.member?.displayName || interaction.user.username,
-        id: interaction.user.id,
-        tag: interaction.user.tag,
-      }
+        // Prepara dados do usuário para log
+        const usuario = {
+            username: interaction.user.username,
+            displayName: interaction.member?.displayName || interaction.user.username,
+            id: interaction.user.id,
+            tag: interaction.user.tag,
+        }
 
-      logger.info("✅ Mídia kit acessado:", {
-        usuario: {
-          username: usuario.username,
-          displayName: usuario.displayName,
-          id: usuario.id,
-          tag: usuario.tag
-        },
-        comando: "midiakit",
-        timestamp: new Date().toISOString(),
-        categoria: 'discord_comando_acesso',
-        operacao: 'midiakit_acessado'
-      })
+        logger.info("✅ Mídia kit acessado:", {
+            usuario: {
+                username: usuario.username,
+                displayName: usuario.displayName,
+                id: usuario.id,
+                tag: usuario.tag
+            },
+            comando: "midiakit",
+            timestamp: new Date().toISOString(),
+            categoria: 'discord_comando_acesso',
+            operacao: 'midiakit_acessado'
+        })
     }
 
     // Comando /apresentações
     else if (interaction.commandName === "apresentações") {
-      const embed = {
-        color: 0xff4f00,
-        title: `${obterEmoji("info")} Apresentações Comerciais 4.events`,
-        description: "**Acesse todas as apresentações comerciais oficiais da 4.events**\n" +
-                     "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-        fields: [
-          {
-            name: `${obterEmoji("pasta")} **Apresentações Comerciais**`,
-            value: "**📁 [CLIQUE AQUI para acessar pasta no Google Drive](https://drive.google.com/drive/folders/1Pgveln9kAC5RBaUce78ST6JakIPNIKOW?usp=sharing)**\n" +
-                   "• Apresentações comerciais em formato PDF\n" +
-                   "• Apresentações editáveis online\n" +
-                   "• Slides com dados atualizados e cases de sucesso",
-            inline: false,
-          },
-          {
-            name: `${obterEmoji("warn")} **Importante:**`,
-            value: "• Estas apresentações são de uso interno exclusivo da 4.events\n",
-            inline: false,
-          }
-        ],
-        footer: {
-          text: "4.events Marketing Bot • Apresentações Comerciais • Uso Interno",
-        },
-        timestamp: new Date().toISOString(),
-      }
+      // Criar o container com os novos components V2
+      const components = [
+        new ContainerBuilder()
+          .setAccentColor(16731905)
+          .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(`### ${obterEmoji("info")} Apresentações Comerciais 4.events`),
+          )
+          .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent("👇 Clique no botão abaixo e acesse todas as apresentações comerciais oficiais da 4.events"),
+          )
+          .addActionRowComponents(
+            new ActionRowBuilder()
+              .addComponents(
+                new ButtonBuilder()
+                  .setStyle(ButtonStyle.Link)
+                  .setLabel("Acessar drive apresentações")
+                  .setURL("https://drive.google.com/drive/u/1/folders/1Pgveln9kAC5RBaUce78ST6JakIPNIKOW"),
+              ),
+          )
+          .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(`${obterEmoji("warn")} **Importante:**\n• Este drive é de uso interno exclusivo da 4.events\n• Não compartilhe o drive externamente sem autorização`),
+          ),
+      ];
 
       await interaction.reply({
-        embeds: [embed],
+        components: components,
+        flags: MessageFlags.IsComponentsV2
       })
 
       // Prepara dados do usuário para log
@@ -2282,36 +2870,33 @@ client.on("interactionCreate", async (interaction) => {
 
     // Comando /modelos
     else if (interaction.commandName === "modelos") {
-      const embed = {
-        color: 0xff4f00,
-        title: `${obterEmoji("info")} Modelos/Templates de Documentos 4.events`,
-        description: "**Acesse todos os modelos de documentos e templates com branding da 4.events**\n" +
-                     "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-        fields: [
-          {
-            name: `${obterEmoji("pasta")} **Modelos de Documentos**`,
-            value: "**📁 [CLIQUE AQUI para Acessar pasta no Google Drive](https://drive.google.com/drive/folders/1XlQOqlj7V6MV4O44goL51Zv_VjwDd8q6?usp=sharing)**\n" +
-                   "• Templates de documentos timbrados da 4.events\n" +
-                   "• Templates para relatórios e apresentações\n" +
-                   "• Documentos com identidade visual padronizada\n",
-            inline: false,
-          },
-          {
-            name: `${obterEmoji("warn")} **Importante:**`,
-            value: "• Estes modelos são de uso interno exclusivo da 4.events\n" +
-                   "• Não compartilhe externamente sem autorização\n" +
-                   "• Mantenha sempre a identidade visual padrão\n",
-            inline: false,
-          }
-        ],
-        footer: {
-          text: "4.events Marketing Bot • Modelos de Documentos • Uso Interno",
-        },
-        timestamp: new Date().toISOString(),
-      }
+      // Criar o container com os novos components V2
+      const components = [
+        new ContainerBuilder()
+          .setAccentColor(16731905)
+          .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(`### ${obterEmoji("info")} Modelos/Templates de Documentos 4.events`),
+          )
+          .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent("👇 Clique no botão abaixo e acesse o drive com todos os modelos de documentos e templates com branding da 4.events"),
+          )
+          .addActionRowComponents(
+            new ActionRowBuilder()
+              .addComponents(
+                new ButtonBuilder()
+                  .setStyle(ButtonStyle.Link)
+                  .setLabel("Acessar drive de modelos de docs")
+                  .setURL("https://drive.google.com/drive/u/1/folders/1XlQOqlj7V6MV4O44goL51Zv_VjwDd8q6?usp=sharing"),
+              ),
+          )
+          .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(`${obterEmoji("warn")} **Importante:**\n• Não compartilhe a pasta externamente sem autorização\n• Mantenha sempre a identidade visual padrão`),
+          ),
+      ];
 
       await interaction.reply({
-        embeds: [embed],
+        components: components,
+        flags: MessageFlags.IsComponentsV2
       })
 
       // Prepara dados do usuário para log
@@ -2339,33 +2924,22 @@ client.on("interactionCreate", async (interaction) => {
     // Comando /ping
     else if (interaction.commandName === "ping") {
       const ping = Math.round(client.ws.ping)
+      
+      // Criar o container com os novos components V2
+      const components = [
+        new ContainerBuilder()
+          .setAccentColor(16731904) // Cor laranja da 4.events (0xff4f00)
+          .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(`### ${obterEmoji("pingpong")} Pong!`),
+          )
+          .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(`**Latência:** \`${ping} ms\``),
+          )
+      ];
+
       await interaction.reply({
-        embeds: [{
-          color: 0xff4f00,
-          title: `${obterEmoji("pingpong")} Pong!`,
-          description: "**Status de Conectividade do Bot**",
-          fields: [
-            {
-              name: `${obterEmoji("server")} Latência`,
-              value: `\`${ping}ms\``,
-              inline: true,
-            },
-            {
-              name: `${obterEmoji("relogio")} Tempo online`,
-              value: `\`${Math.floor(process.uptime())}s\``,
-              inline: true,
-            },
-            {
-              name: `${obterEmoji("ligado")} Status`,
-              value: "`Conectado`",
-              inline: true,
-            }
-          ],
-          footer: {
-            text: "4.events Marketing Bot",
-          },
-          timestamp: new Date().toISOString(),
-        }],
+        components: components,
+        flags: MessageFlags.IsComponentsV2
       })
     }
 
@@ -2434,152 +3008,34 @@ client.on("interactionCreate", async (interaction) => {
 
     // Comando /help
     else if (interaction.commandName === "help") {
-      const embed = {
-        color: 0xff4f00,
-        title: `${obterEmoji("ajuda")} Central de ajuda`,
-        description: "**Bot para criação de solicitações de tarefas de marketing, registro de parcerias e análise de performance.**\n" +
-                    "Além dessas funcionalidades principais, também existem funcionalidades para auxiliar em demais tarefas do dia a dia.\n" +
-                     "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-        fields: [
-          {
-            name: `${obterEmoji("config")} **COMANDOS DISPONÍVEIS**`,
-            value: "` `",
-            inline: false,
-          },
-          {
-            name: "📋 `/marketing`",
-            value: "**Descrição:** Cria uma nova solicitação de tarefa de marketing\n" +
-                  "**Como usar:** Digite `/marketing` e preencha o formulário que será exibido\n" +
-                  "**Campos do formulário:**\n" +
-                  "• **Nome da tarefa** - Título da tarefa *(máx: 100 caracteres)*\n" +
-                  "• **Detalhes** - Descrição detalhada *(máx: 1000 caracteres)*\n" +
-                  "• **Prazo** - Data limite no formato **DD/MM/AAAA**\n\n" +
-                  "**Exemplo:** Digite `/marketing` → Preencha o modal → Envie",
-            inline: false,
-          },
-          {
-            name: "🤝 `/parceria`",
-            value: "**Descrição:** Registra uma nova parceria comercial\n" +
-                  "**Como usar:** Digite `/parceria` e preencha o formulário que será exibido\n" +
-                  "**Campos do formulário:**\n" +
-                  "• **URL do card** - URL do card no sistema *(máx: 500 caracteres)*\n" +
-                  "• **Data do evento** - Data do evento no formato **DD/MM/AAAA**\n\n" +
-                  "**Exemplo:** Digite `/parceria` → Preencha o modal → Envie",
-            inline: false,
-          },
-          {
-            name: "📊 `/cro`",
-            value: "**Descrição:** Obtém dados de performance via Microsoft Clarity\n" +
-                   "**Parâmetros (opcionais):**\n" +
-                   "• `data_desejada` - Data para consulta no formato **DD/MM/AAAA** *(padrão: hoje)*\n" +
-                   "• `final_da_url_desejada` - Final da URL para análise *(padrão: dados consolidados)*\n\n" +
-                   "**Exemplos:**\n" +
-                   "• `/cro` - Dados consolidados de hoje\n" +
-                   "• `/cro data_desejada:20/07/2025` - Dados consolidados de data específica\n" +
-                   "• `/cro final_da_url_desejada:credenciamento` - Página específica de hoje\n" +
-                   "• `/cro data_desejada:20/07/2025 final_da_url_desejada:/credenciamento` - Página específica em data específica",
-            inline: false,
-          },
-          {
-            name: "🎨 `/midiakit`",
-            value: "**Descrição:** Acessa o mídia kit oficial da 4.events\n" +
-                   "**Uso:** Digite `/midiakit` para visualizar todos os links dos materiais visuais\n" +
-                   "**Conteúdo:** Logos oficiais, ícones de produtos e materiais audiovisuais",
-            inline: false,
-          },
-          {
-            name: "📊 `/apresentações`",
-            value: "**Descrição:** Acessa as apresentações comerciais oficiais da 4.events\n" +
-                   "**Uso:** Digite `/apresentações` para acessar apresentações em PDF e editáveis\n" +
-                   "**Conteúdo:** Apresentações comerciais, técnicas e de vendas\n" +
-                   "**⚠️ Uso interno exclusivo - não compartilhar externamente**",
-            inline: false,
-          },
-          {
-            name: "📄 `/modelos`",
-            value: "**Descrição:** Acessa modelos de documentos e templates com branding da 4.events\n" +
-                   "**Uso:** Digite `/modelos` para acessar templates de documentos\n" +
-                   "**Conteúdo:** Documentos timbrados, contratos, propostas e relatórios\n" +
-                   "**⚠️ Uso interno exclusivo - não compartilhar externamente**",
-            inline: false,
-          },
-                    {
-            name: "🖼️ `/capa-linkedin`",
-            value: "**Descrição:** Acessa a capa oficial da 4.events para LinkedIn dos colaboradores\n" +
-                   "**Uso:** Digite `/capa-linkedin` para acessar o link da imagem\n",
-            inline: false,
-          },
-          {
-            name: "🖥️ `/fundo-escritorio`",
-            value: "**Descrição:** Acessa o papel de parede oficial da 4.events para área de trabalho\n" +
-                   "**Uso:** Digite `/fundo-escritorio` para acessar o link da imagem\n",
-            inline: false,
-          },
-          {
-            name: "🏓 `/ping`",
-            value: "**Descrição:** Verifica a conectividade e latência do bot\n" +
-                   "**Uso:** Digite `/ping` para testar a conexão",
-            inline: false,
-          },
-          {
-            name: "❓ `/help`",
-            value: "**Descrição:** Exibe esta mensagem de ajuda\n" +
-                   "**Uso:** Digite `/help` para ver todos os comandos",
-            inline: false,
-          },
-          {
-            name: "📅 **FORMATOS DE DATA ACEITOS**",
-            value: "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-            inline: false,
-          },
-          {
-            name: `${obterEmoji("certo")} **Exemplos Válidos**`,
-            value: "• `25/12/2025` - Formato padrão\n" +
-                   "• `5/3/25` - Dia e mês com 1 dígito, ano com 2\n" +
-                   "• `15/3/25` - Dia com 2 dígitos, mês com 1\n" +
-                   "• `5/03/2025` - Mês com zero à esquerda\n" +
-                   "• `05/12/25` - Dia com zero à esquerda",
-            inline: true,
-          },
-          {
-            name: `${obterEmoji("warn")} **Regras Importantes**`,
-            value: "• /marketing: Não aceita datas no passado\n" +
-                   "• /parceria: Aceita datas passadas\n" +
-                   "• /cro: Não aceita datas futuras\n" +
-                   "• Use apenas números e barras `/` em datas\n" +
-                   "• Anos de 2 dígitos assumem 20XX\n",
-            inline: true,
-          },
-          {
-            name: `${obterEmoji("planeta")} **ANÁLISE DE PERFORMANCE (/cro)**`,
-            value: "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-            inline: false,
-          },
-          {
-            name: "📊 **Métricas Disponíveis**",
-            value: "• **Total de Sessões** - Todas as visitas registradas\n" +
-                   "• **Sessões Reais** - Visitas excluindo bots\n" +
-                   "• **Usuários Únicos** - Visitantes únicos no período\n" +
-                   "• **Páginas/Sessão** - Média real de páginas por visita\n" +
-                   "• **Eventos Inteligentes** - Total de eventos capturados\n" +
-                   "• **Envios de Formulário** - Submissões de formulários\n" +
-                   "• **Dados Consolidados** - Estatísticas de todo o site\n" +
-                   "• **Top 5 Sistemas Operacionais** - Ranking ordenado por sessões",
-            inline: false,
-          }
-        ],
-        footer: {
-          text: "Desenvolvido para 4.events • Use os comandos em qualquer canal do servidor",
-        },
-        timestamp: new Date().toISOString(),
-      }
+      const components = criarContainerInicialHelp();
 
       await interaction.reply({
-        embeds: [embed],
-        flags: MessageFlags.Ephemeral,
+        components: components,
+        flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral
+      })
+
+      // Prepara dados do usuário para log
+      const usuario = {
+        username: interaction.user.username,
+        displayName: interaction.member?.displayName || interaction.user.username,
+        id: interaction.user.id,
+        tag: interaction.user.tag,
+      }
+
+      logger.info("✅ Central de ajuda acessada:", {
+        usuario: {
+          username: usuario.username,
+          displayName: usuario.displayName,
+          id: usuario.id,
+          tag: usuario.tag
+        },
+        comando: "help",
+        timestamp: new Date().toISOString(),
+        categoria: 'discord_comando_acesso',
+        operacao: 'help_acessado'
       })
     }
-
 
   } catch (error) {
       logger.error("❌ Erro ao processar comando:", {
@@ -2634,20 +3090,18 @@ client.on("messageCreate", async (message) => {
       // Reage com emoji de erro
       await message.react(obterEmoji("errado") || "❌")
       
-      // Responde com mensagem de erro
-      const embedErro = {
-        color: 0xff0000,
-        title: `${obterEmoji("errado")} Acesso Negado`,
-        description: "**Você não tem permissão para acessar os logs do sistema.**\n\n" +
-                     "Este comando é restrito a administradores autorizados do bot.",
-        footer: {
-          text: "4.events Marketing Bot • Acesso Restrito",
-        },
-        timestamp: new Date().toISOString(),
-      }
+      // Responde com container de erro
+      const containerErro = new ContainerBuilder()
+        .setAccentColor(16711680) // Vermelho
+        .addTextDisplayComponents(
+          new TextDisplayBuilder().setContent(`### ${obterEmoji("errado")} Acesso Negado`),
+        )
+        .addTextDisplayComponents(
+          new TextDisplayBuilder().setContent("**Você não tem permissão para acessar os logs do sistema.**\n\nEste comando é restrito a administradores autorizados do bot."),
+        )
       
       await message.reply({
-        embeds: [embedErro],
+        components: [containerErro],
         flags: MessageFlags.Ephemeral,
       })
       
@@ -2677,89 +3131,76 @@ client.on("messageCreate", async (message) => {
     // Reage com emoji de sucesso
     await message.react(obterEmoji("certo") || "✅")
 
-    // Envia feedback imediato ao usuário
-    const loadingEmoji = obterEmoji("loading")
-    const respostaInicial = await message.reply(`${loadingEmoji} Buscando logs do sistema...`)
-
-    // Busca logs gerais por padrão
-    const resultado = await lerArquivosLog('geral')
+    // Carregar logs da categoria 'geral' imediatamente
+    const resultadoLogsGeral = await lerArquivosLog('geral')
     
-    if (!resultado.success) {
-      const embedErro = {
-        color: 0xff0000,
-        title: `${obterEmoji("errado")} Erro ao Carregar Logs`,
-        description: `**Erro:** ${resultado.error}`,
-        footer: {
-          text: "4.events Marketing Bot • Sistema de Logs",
-        },
-        timestamp: new Date().toISOString(),
-      }
-      
-      await respostaInicial.edit({
-        content: "",
-        embeds: [embedErro]
-      })
-      return
-    }
-    
-    // Cria embed com os logs
-    const embedLogs = formatarLogsParaEmbed(resultado.logs, 'geral', resultado.arquivo, resultado.total)
-    const botoesNavegacao = criarBotoesLogs()
-    
-    // Edita resposta inicial (de carregamento)
-    await respostaInicial.edit({
-      content: "",
-      embeds: [embedLogs],
-      components: [botoesNavegacao]
+    // Envia container inicial já com dados dos logs da categoria 'geral'
+    const componentsIniciais = criarContainerInicialLogs('geral', resultadoLogsGeral)
+    const respostaInicial = await message.reply({
+      components: componentsIniciais,
+      flags: MessageFlags.IsComponentsV2
     })
 
-    const resposta = respostaInicial
-    
-    // Collector para os botões
-    const collector = resposta.createMessageComponentCollector({
-      componentType: ComponentType.Button,
+    // Collector para os select menus
+    const collector = respostaInicial.createMessageComponentCollector({
+      componentType: ComponentType.StringSelect,
       time: 300000 // 5 minutos
     })
-    
+
     collector.on('collect', async (interaction) => {
-      // Verifica se quem clicou no botão é um administrador autorizado
+      // Verifica se quem selecionou é um administrador autorizado
       if (!BOT_ADMIN_DISCORD_USERS_ID.includes(interaction.user.id)) {
         await interaction.reply({
-          content: `${obterEmoji("errado")} Apenas administradores autorizados podem usar estes botões.`,
+          content: `${obterEmoji("errado")} Apenas administradores autorizados podem usar este menu.`,
           flags: MessageFlags.Ephemeral
         })
         return
       }
       
-      const tipoLog = interaction.customId.replace('logs_', '')
+      // Pega a categoria selecionada
+      const tipoLog = interaction.values[0]
       const resultadoNavegacao = await lerArquivosLog(tipoLog)
       
-      if (!resultadoNavegacao.success) {
-        await interaction.reply({
-          content: `${obterEmoji("errado")} Erro ao carregar logs: ${resultadoNavegacao.error}`,
-          flags: MessageFlags.Ephemeral
-        })
-        return
-      }
-      
-      const embedAtualizado = formatarLogsParaEmbed(
-        resultadoNavegacao.logs, 
-        tipoLog, 
-        resultadoNavegacao.arquivo, 
-        resultadoNavegacao.total
-      )
+      // Cria container atualizado com os logs da categoria selecionada
+      const componentsAtualizados = criarContainerInicialLogs(tipoLog, resultadoNavegacao)
       
       await interaction.update({
-        embeds: [embedAtualizado],
-        components: [botoesNavegacao]
+        components: componentsAtualizados,
+        flags: MessageFlags.IsComponentsV2
+      })
+      
+      logger.info("✅ Categoria de logs selecionada:", {
+        usuario: {
+          id: interaction.user.id,
+          username: interaction.user.username,
+          tag: interaction.user.tag
+        },
+        categoria: tipoLog,
+        sucesso: resultadoNavegacao.success,
+        logsEncontrados: resultadoNavegacao.success ? resultadoNavegacao.total : 0,
+        timestamp: new Date().toISOString(),
+        categoria_log: 'discord_comando_logs',
+        operacao: 'categoria_selecionada'
       })
     })
     
     collector.on('end', () => {
-      // Remove os botões quando o collector expira
-      resposta.edit({
-        components: []
-      }).catch(() => {}) // Ignora erros se a mensagem já foi deletada
+      // Container para informar que o tempo expirou
+      const containerExpirado = new ContainerBuilder()
+        .setAccentColor(16731904)
+        .addTextDisplayComponents(
+          new TextDisplayBuilder().setContent(`### ${obterEmoji("relogio")} Sessão expirada`),
+        )
+        .addTextDisplayComponents(
+          new TextDisplayBuilder().setContent("Esta sessão de visualização de logs expirou. Mencione o bot novamente com 'logs' para abrir uma nova sessão."),
+        )
+
+      respostaInicial.edit({
+        components: [containerExpirado],
+        flags: MessageFlags.IsComponentsV2
+      }).catch(() => {
+        // Ignora erros se a mensagem já foi deletada
+      })
     })
     
     // Log da execução bem-sucedida
@@ -2777,11 +3218,10 @@ client.on("messageCreate", async (message) => {
         id: message.channel.id,
         nome: message.channel.name
       },
-      logsEncontrados: resultado.total,
-      arquivo: resultado.arquivo,
+      componenteUsado: 'container_v2_com_select_menu',
       timestamp: new Date().toISOString(),
       categoria: 'discord_comando_logs',
-      operacao: 'logs_consultados_sucesso'
+      operacao: 'logs_iniciado_sucesso'
     })
     
   } catch (error) {
@@ -2800,9 +3240,18 @@ client.on("messageCreate", async (message) => {
     })
     
     try {
+      const containerErro = new ContainerBuilder()
+        .setAccentColor(16711680)
+        .addTextDisplayComponents(
+          new TextDisplayBuilder().setContent(`### ${obterEmoji("errado")} Erro Interno`),
+        )
+        .addTextDisplayComponents(
+          new TextDisplayBuilder().setContent("Ocorreu um erro interno ao processar o comando de logs. Tente novamente."),
+        )
+
       await message.reply({
-        content: `${obterEmoji("errado")} Ocorreu um erro interno ao processar o comando de logs.`,
-        flags: MessageFlags.Ephemeral
+        components: [containerErro],
+        flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2
       })
     } catch {
       // Ignora erros de resposta
