@@ -16,10 +16,13 @@ import {
   TextDisplayBuilder,
   SectionBuilder,
   SeparatorBuilder,
-  SeparatorSpacingSize
+  SeparatorSpacingSize,
+  AttachmentBuilder,
+  FileBuilder
 } from "discord.js"
 import fs from "fs"
 import path from "path"
+import { zip } from 'zip-a-folder'
 import dotenv from "dotenv"
 import fetch from "node-fetch"
 import logger, { logCommand, logError, logWebhook, logPerformance } from './logger.js'
@@ -465,6 +468,26 @@ function criarContainerInicialLogs(categoriaSelecionada = 'geral', resultadoLogs
     )
   }
 
+  container.addSeparatorComponents(
+    new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
+  )
+
+  // Criar um botão de download dos logs (.zip)
+  const downloadLogsButton = new ButtonBuilder()
+    .setCustomId('download_logs_zip') 
+    .setLabel('Baixar logs')
+    .setStyle(ButtonStyle.Secondary)
+
+  // Criar o botão
+  const limparLogsButton = new ButtonBuilder()
+    .setCustomId('clear_logs')
+    .setLabel('Limpar logs')
+    .setStyle(ButtonStyle.Danger)
+
+  container.addActionRowComponents(
+    new ActionRowBuilder().addComponents(downloadLogsButton, limparLogsButton)
+  )
+
   return [container]
 }
 
@@ -566,6 +589,358 @@ function criarContainerInicialHelp() {
         new TextDisplayBuilder().setContent(`${obterEmoji("warn")} **Importante:**\n• Use os comandos em qualquer canal do servidor\n• Desenvolvido especificamente para a equipe 4.events\n• Para suporte técnico, entre em contato com os administradores`),
       ),
   ];
+}
+
+// Função para gerar arquivo ZIP com todos os logs
+async function gerarZipLogs() {
+  const startTime = Date.now()
+  
+  try {
+    const agora = new Date()
+    const dataHora = agora.toISOString()
+      .replace(/:/g, '-')
+      .replace(/\./g, '-')
+      .slice(0, 19) // Remove os milissegundos e o Z
+    
+    const nomeArquivo = `logs-${dataHora}.zip`
+    const caminhoZip = path.join(process.cwd(), nomeArquivo)
+    const pastaLogs = path.join(process.cwd(), 'logs')
+    
+    logger.info("🎯 Iniciando geração de arquivo ZIP dos logs", {
+      nomeArquivo: nomeArquivo,
+      caminhoZip: caminhoZip,
+      pastaLogs: pastaLogs,
+      dataHoraFormatada: dataHora,
+      timestamp: agora.toISOString(),
+      categoria: 'zip_logs_operacao',
+      operacao: 'inicio_geracao_zip'
+    })
+    
+    // Verifica se a pasta logs existe
+    if (!fs.existsSync(pastaLogs)) {
+      logger.error("❌ Pasta de logs não encontrada durante geração ZIP", {
+        pastaLogs: pastaLogs,
+        pastaExiste: false,
+        nomeArquivo: nomeArquivo,
+        categoria: 'zip_logs_erro',
+        operacao: 'pasta_logs_nao_encontrada'
+      })
+      return { success: false, error: "Pasta de logs não encontrada" }
+    }
+    
+    // Lista conteúdo da pasta logs para debugging
+    const arquivosLogs = fs.readdirSync(pastaLogs)
+    const estatisticasPasta = {
+      totalArquivos: arquivosLogs.length,
+      arquivos: arquivosLogs.map(arquivo => {
+        const caminhoCompleto = path.join(pastaLogs, arquivo)
+        const stats = fs.statSync(caminhoCompleto)
+        return {
+          nome: arquivo,
+          tamanho: stats.size,
+          modificado: stats.mtime.toISOString()
+        }
+      }),
+      tamanhoTotal: arquivosLogs.reduce((total, arquivo) => {
+        const stats = fs.statSync(path.join(pastaLogs, arquivo))
+        return total + stats.size
+      }, 0)
+    }
+    
+    logger.info("📁 Conteúdo da pasta logs identificado", {
+      ...estatisticasPasta,
+      pastaLogs: pastaLogs,
+      nomeArquivo: nomeArquivo,
+      categoria: 'zip_logs_operacao',
+      operacao: 'analise_pasta_logs'
+    })
+    
+    // Remove arquivo ZIP anterior se existir
+    const arquivosZipExistentes = fs.readdirSync(process.cwd())
+      .filter(arquivo => arquivo.startsWith('logs-') && arquivo.endsWith('.zip'))
+    
+    if (arquivosZipExistentes.length > 0) {
+      logger.info("🗑️ Removendo arquivos ZIP anteriores", {
+        arquivosParaRemover: arquivosZipExistentes,
+        totalArquivos: arquivosZipExistentes.length,
+        nomeArquivo: nomeArquivo,
+        categoria: 'zip_logs_operacao',
+        operacao: 'limpeza_arquivos_antigos'
+      })
+      
+      for (const arquivo of arquivosZipExistentes) {
+        const caminhoArquivo = path.join(process.cwd(), arquivo)
+        try {
+          fs.unlinkSync(caminhoArquivo)
+          logger.info(`✅ Arquivo ZIP anterior removido: ${arquivo}`, {
+            arquivoRemovido: arquivo,
+            caminhoCompleto: caminhoArquivo,
+            nomeArquivo: nomeArquivo,
+            categoria: 'zip_logs_operacao',
+            operacao: 'arquivo_antigo_removido'
+          })
+        } catch (errorRemove) {
+          logger.warn(`⚠️ Falha ao remover arquivo ZIP anterior: ${arquivo}`, {
+            arquivoNaoRemovido: arquivo,
+            erro: errorRemove.message,
+            caminhoCompleto: caminhoArquivo,
+            nomeArquivo: nomeArquivo,
+            categoria: 'zip_logs_warning',
+            operacao: 'erro_remover_arquivo_antigo'
+          })
+        }
+      }
+    } else {
+      logger.info("ℹ️ Nenhum arquivo ZIP anterior encontrado", {
+        diretorioVerificado: process.cwd(),
+        nomeArquivo: nomeArquivo,
+        categoria: 'zip_logs_operacao',
+        operacao: 'nenhum_arquivo_antigo'
+      })
+    }
+    
+    // Gera o novo arquivo ZIP
+    logger.info("🔄 Iniciando compactação da pasta logs", {
+      pastaOrigem: pastaLogs,
+      arquivoDestino: caminhoZip,
+      nomeArquivo: nomeArquivo,
+      arquivosParaComprimir: estatisticasPasta.totalArquivos,
+      tamanhoTotalMB: (estatisticasPasta.tamanhoTotal / 1024 / 1024).toFixed(2),
+      categoria: 'zip_logs_operacao',
+      operacao: 'inicio_compactacao'
+    })
+    
+    await zip(pastaLogs, caminhoZip)
+    
+    // Verifica se o arquivo foi criado e obtém informações
+    if (!fs.existsSync(caminhoZip)) {
+      logger.error("❌ Arquivo ZIP não foi criado apesar de não haver erro na compactação", {
+        caminhoEsperado: caminhoZip,
+        nomeArquivo: nomeArquivo,
+        pastaOrigem: pastaLogs,
+        categoria: 'zip_logs_erro',
+        operacao: 'arquivo_zip_nao_criado'
+      })
+      return { success: false, error: "Arquivo ZIP não foi criado" }
+    }
+    
+    const statsZip = fs.statSync(caminhoZip)
+    const duracaoMs = Date.now() - startTime
+    
+    logger.info("✅ Arquivo ZIP de logs gerado com sucesso", {
+      nomeArquivo: nomeArquivo,
+      caminhoCompleto: caminhoZip,
+      tamanhoBytes: statsZip.size,
+      tamanhoMB: (statsZip.size / 1024 / 1024).toFixed(2),
+      duracaoMs: duracaoMs,
+      duracaoFormatada: `${(duracaoMs / 1000).toFixed(2)}s`,
+      arquivosComprimidos: estatisticasPasta.totalArquivos,
+      taxaCompressao: ((1 - (statsZip.size / estatisticasPasta.tamanhoTotal)) * 100).toFixed(1) + '%',
+      categoria: 'zip_logs_sucesso',
+      operacao: 'zip_gerado_com_sucesso'
+    })
+    
+    return { 
+      success: true, 
+      nomeArquivo: nomeArquivo,
+      caminhoCompleto: caminhoZip,
+      tamanho: statsZip.size,
+      duracaoMs: duracaoMs,
+      arquivosComprimidos: estatisticasPasta.totalArquivos
+    }
+    
+  } catch (error) {
+    const duracaoMs = Date.now() - startTime
+    
+    logger.error("❌ Erro ao gerar ZIP dos logs:", {
+      erro: error.message,
+      stack: error.stack,
+      errorName: error.name,
+      duracaoAteErroMs: duracaoMs,
+      duracaoAteErroFormatada: `${(duracaoMs / 1000).toFixed(2)}s`,
+      categoria: 'zip_logs_erro',
+      operacao: 'erro_geracao_zip',
+      fase: 'compactacao_ou_verificacao'
+    })
+    
+    return { success: false, error: error.message }
+  }
+}
+
+// Função para excluir todos os arquivos de logs
+async function excluirTodosLogs() {
+  const startTime = Date.now()
+  
+  try {
+    const pastaLogs = path.join(process.cwd(), 'logs')
+    
+    logger.info("🗑️ Iniciando exclusão de todos os arquivos de logs", {
+      pastaLogs: pastaLogs,
+      timestamp: new Date().toISOString(),
+      categoria: 'exclusao_logs_operacao',
+      operacao: 'inicio_exclusao_logs'
+    })
+    
+    // Verifica se a pasta logs existe
+    if (!fs.existsSync(pastaLogs)) {
+      logger.warn("⚠️ Pasta de logs não encontrada durante exclusão", {
+        pastaLogs: pastaLogs,
+        pastaExiste: false,
+        categoria: 'exclusao_logs_warning',
+        operacao: 'pasta_logs_nao_encontrada'
+      })
+      return { success: false, error: "Pasta de logs não encontrada" }
+    }
+    
+    // Lista todos os arquivos da pasta logs
+    const arquivosLogs = fs.readdirSync(pastaLogs)
+    const estatisticasPasta = {
+      totalArquivos: arquivosLogs.length,
+      arquivos: arquivosLogs.map(arquivo => {
+        const caminhoCompleto = path.join(pastaLogs, arquivo)
+        const stats = fs.statSync(caminhoCompleto)
+        return {
+          nome: arquivo,
+          tamanho: stats.size,
+          modificado: stats.mtime.toISOString()
+        }
+      }),
+      tamanhoTotal: arquivosLogs.reduce((total, arquivo) => {
+        const stats = fs.statSync(path.join(pastaLogs, arquivo))
+        return total + stats.size
+      }, 0)
+    }
+    
+    logger.info("📁 Arquivos de logs identificados para exclusão", {
+      ...estatisticasPasta,
+      pastaLogs: pastaLogs,
+      categoria: 'exclusao_logs_operacao',
+      operacao: 'analise_arquivos_logs'
+    })
+    
+    // Exclui todos os arquivos
+    let arquivosExcluidos = 0
+    let errosExclusao = []
+    
+    for (const arquivo of arquivosLogs) {
+      const caminhoArquivo = path.join(pastaLogs, arquivo)
+      try {
+        fs.unlinkSync(caminhoArquivo)
+        arquivosExcluidos++
+        
+        logger.info(`✅ Arquivo de log excluído: ${arquivo}`, {
+          arquivoExcluido: arquivo,
+          caminhoCompleto: caminhoArquivo,
+          categoria: 'exclusao_logs_operacao',
+          operacao: 'arquivo_excluido_sucesso'
+        })
+      } catch (errorExclusao) {
+        errosExclusao.push({
+          arquivo: arquivo,
+          erro: errorExclusao.message
+        })
+        
+        logger.error(`❌ Erro ao excluir arquivo de log: ${arquivo}`, {
+          arquivoNaoExcluido: arquivo,
+          erro: errorExclusao.message,
+          stack: errorExclusao.stack,
+          caminhoCompleto: caminhoArquivo,
+          categoria: 'exclusao_logs_erro',
+          operacao: 'erro_excluir_arquivo'
+        })
+      }
+    }
+    
+    const duracaoMs = Date.now() - startTime
+    
+    // Verifica se houve erros
+    if (errosExclusao.length > 0) {
+      logger.warn("⚠️ Exclusão de logs finalizada com alguns erros", {
+        arquivosExcluidos: arquivosExcluidos,
+        totalArquivos: arquivosLogs.length,
+        errosExclusao: errosExclusao,
+        duracaoMs: duracaoMs,
+        duracaoFormatada: `${(duracaoMs / 1000).toFixed(2)}s`,
+        categoria: 'exclusao_logs_warning',
+        operacao: 'exclusao_finalizada_com_erros'
+      })
+      
+      return { 
+        success: false, 
+        error: `${errosExclusao.length} arquivos não puderam ser excluídos`,
+        arquivosExcluidos: arquivosExcluidos,
+        totalArquivos: arquivosLogs.length,
+        erros: errosExclusao
+      }
+    }
+    
+    logger.info("✅ Todos os arquivos de logs excluídos com sucesso", {
+      arquivosExcluidos: arquivosExcluidos,
+      totalArquivos: arquivosLogs.length,
+      tamanhoTotalExcluidoMB: (estatisticasPasta.tamanhoTotal / 1024 / 1024).toFixed(2),
+      duracaoMs: duracaoMs,
+      duracaoFormatada: `${(duracaoMs / 1000).toFixed(2)}s`,
+      categoria: 'exclusao_logs_sucesso',
+      operacao: 'exclusao_finalizada_sucesso'
+    })
+    
+    return { 
+      success: true, 
+      arquivosExcluidos: arquivosExcluidos,
+      totalArquivos: arquivosLogs.length,
+      tamanhoExcluidoMB: (estatisticasPasta.tamanhoTotal / 1024 / 1024).toFixed(2),
+      duracaoMs: duracaoMs
+    }
+    
+  } catch (error) {
+    const duracaoMs = Date.now() - startTime
+    
+    logger.error("❌ Erro crítico ao excluir logs:", {
+      erro: error.message,
+      stack: error.stack,
+      errorName: error.name,
+      duracaoAteErroMs: duracaoMs,
+      duracaoAteErroFormatada: `${(duracaoMs / 1000).toFixed(2)}s`,
+      categoria: 'exclusao_logs_erro',
+      operacao: 'erro_critico_exclusao',
+      fase: 'exclusao_geral'
+    })
+    
+    return { success: false, error: error.message }
+  }
+}
+
+// Função para criar container de confirmação de exclusão de logs
+function criarContainerConfirmacaoExclusaoLogs() {
+  const containerConfirmacao = new ContainerBuilder()
+    .setAccentColor(16711680) // Vermelho para indicar perigo
+    .addTextDisplayComponents(
+      new TextDisplayBuilder().setContent(`### ${obterEmoji("warn")} Confirmar exclusão de logs`),
+    )
+    .addTextDisplayComponents(
+      new TextDisplayBuilder().setContent("\n**Esta ação não pode ser revertida!**\nVocê tem certeza que deseja excluir **TODOS** os arquivos de logs do sistema?\nIsso incluirá:\n• `Logs gerais`\n• `Logs de comandos`\n• `Logs de erros`\n• `Logs de exceções`\n• `Arquivos de log microcompactados (.gz)`"),
+    )
+    .addSeparatorComponents(
+      new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
+    )
+
+  // Botão para confirmar exclusão
+  const confirmarButton = new ButtonBuilder()
+    .setCustomId('confirm_delete_logs')
+    .setLabel('Excluir todos os logs')
+    .setStyle(ButtonStyle.Danger)
+
+  // Botão para cancelar
+  const cancelarButton = new ButtonBuilder()
+    .setCustomId('cancel_delete_logs')
+    .setLabel('Cancelar')
+    .setStyle(ButtonStyle.Secondary)
+
+  containerConfirmacao.addActionRowComponents(
+    new ActionRowBuilder().addComponents(cancelarButton, confirmarButton)
+  )
+
+  return [containerConfirmacao]
 }
 
 // Define o comando slash /marketing
@@ -1960,9 +2335,9 @@ client.on("interactionCreate", async (interaction) => {
       }
     }
 
-    // Handler para botões
+    // Handler de botões
     if (interaction.isButton()) {
-          // Handlar do botão "Voltar ao menu principal" do comando /help
+          // Handler do botão "Voltar ao menu principal" do comando /help
           if (interaction.customId === 'help_voltar') {
             const components = criarContainerInicialHelp();
 
@@ -1987,6 +2362,528 @@ client.on("interactionCreate", async (interaction) => {
             
             return
           }
+
+          // Handler do botão "Baixar Logs (ZIP)"
+          if (interaction.customId === 'download_logs_zip') {
+            const startTime = Date.now()
+            
+            // Verifica se o usuário está autorizado (administrador do bot)
+            const usuarioAutorizado = BOT_ADMIN_DISCORD_USERS_ID.includes(interaction.user.id)
+            
+            logger.info("🎯 Solicitação de download de logs recebida", {
+              usuario: {
+                id: interaction.user.id,
+                username: interaction.user.username,
+                displayName: interaction.member?.displayName || interaction.user.username,
+                tag: interaction.user.tag
+              },
+              autorizado: usuarioAutorizado,
+              botaoClicado: 'download_logs_zip',
+              servidor: {
+                id: interaction.guildId,
+                nome: interaction.guild?.name
+              },
+              canal: {
+                id: interaction.channelId,
+                tipo: interaction.channel?.type
+              },
+              timestamp: new Date().toISOString(),
+              categoria: 'discord_comando_logs',
+              operacao: 'solicitacao_download_logs'
+            })
+            
+            if (!usuarioAutorizado) {
+              await interaction.reply({
+                content: `${obterEmoji("errado")} Apenas administradores autorizados podem baixar os logs.`,
+                flags: MessageFlags.Ephemeral
+              })
+              
+              logger.warn("🚫 Tentativa não autorizada de download de logs via botão", {
+                usuario: {
+                  id: interaction.user.id,
+                  username: interaction.user.username,
+                  tag: interaction.user.tag
+                },
+                servidor: {
+                  id: interaction.guildId,
+                  nome: interaction.guild?.name
+                },
+                canal: {
+                  id: interaction.channelId
+                },
+                motivoNegacao: 'usuario_nao_autorizado',
+                usuariosAutorizados: BOT_ADMIN_DISCORD_USERS_ID.length,
+                timestamp: new Date().toISOString(),
+                categoria: 'discord_comando_logs',
+                operacao: 'download_acesso_negado'
+              })
+              
+              return
+            }
+
+            // Resposta inicial de processamento
+            const loadingEmoji = obterEmoji("loading")
+            await interaction.reply({
+              content: `${loadingEmoji} Gerando arquivo compactado com todos os logs... Por favor, aguarde.`,
+              flags: MessageFlags.Ephemeral
+            })
+
+            logger.info("📤 Iniciando processo de geração de ZIP para usuário autorizado", {
+              usuario: {
+                id: interaction.user.id,
+                username: interaction.user.username,
+                displayName: interaction.member?.displayName || interaction.user.username,
+                tag: interaction.user.tag
+              },
+              mensagemInicialEnviada: true,
+              categoria: 'discord_comando_logs',
+              operacao: 'inicio_processo_zip'
+            })
+
+            try {
+              // Gera o arquivo ZIP
+              const resultadoZip = await gerarZipLogs()
+              
+              logger.info("🔄 Resultado da geração ZIP recebido", {
+                sucesso: resultadoZip.success,
+                nomeArquivo: resultadoZip.success ? resultadoZip.nomeArquivo : null,
+                tamanhoBytes: resultadoZip.success ? resultadoZip.tamanho : null,
+                erro: resultadoZip.success ? null : resultadoZip.error,
+                duracaoGeracaoMs: resultadoZip.success ? resultadoZip.duracaoMs : null,
+                usuario: {
+                  id: interaction.user.id,
+                  username: interaction.user.username
+                },
+                categoria: 'discord_comando_logs',
+                operacao: 'resultado_geracao_zip'
+              })
+              
+              if (resultadoZip.success) {
+                // Cria o attachment e o FileBuilder
+                logger.info("📎 Criando attachment para envio do arquivo ZIP", {
+                  nomeArquivo: resultadoZip.nomeArquivo,
+                  caminhoCompleto: resultadoZip.caminhoCompleto,
+                  tamanhoMB: (resultadoZip.tamanho / 1024 / 1024).toFixed(2),
+                  usuario: {
+                    id: interaction.user.id,
+                    username: interaction.user.username
+                  },
+                  categoria: 'discord_comando_logs',
+                  operacao: 'criacao_attachment'
+                })
+                
+                const file = new AttachmentBuilder(resultadoZip.caminhoCompleto)
+                
+                // Cria container de sucesso
+                const containerSucesso = new ContainerBuilder()
+                  .setAccentColor(65280) // Verde
+                  .addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent(`### ${obterEmoji("certo")} Logs compactados com sucesso!`),
+                  )
+                  .addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent(`**Arquivo:** \`${resultadoZip.nomeArquivo}\`\n**Tamanho:** \`${(resultadoZip.tamanho / 1024 / 1024).toFixed(2)} MB\`\n**Arquivos incluídos:** \`${resultadoZip.arquivosComprimidos}\`\n\n📥 **Clique no arquivo abaixo para fazer o download:**`),
+                  )
+                  .addFileComponents(
+                    new FileBuilder().setURL(`attachment://${resultadoZip.nomeArquivo}`),
+                  )
+                
+                // Edita a resposta com o arquivo
+                await interaction.editReply({
+                  content: "",
+                  components: [containerSucesso],
+                  files: [file],
+                  flags: MessageFlags.IsComponentsV2
+                })
+
+                const duracaoTotalMs = Date.now() - startTime
+
+                // Log da operação bem-sucedida
+                logger.info("✅ Arquivo ZIP de logs gerado e enviado com sucesso", {
+                  usuario: {
+                    id: interaction.user.id,
+                    username: interaction.user.username,
+                    displayName: interaction.member?.displayName || interaction.user.username,
+                    tag: interaction.user.tag
+                  },
+                  arquivo: {
+                    nome: resultadoZip.nomeArquivo,
+                    tamanhoBytes: resultadoZip.tamanho,
+                    tamanhoMB: (resultadoZip.tamanho / 1024 / 1024).toFixed(2),
+                    arquivosIncluidos: resultadoZip.arquivosComprimidos,
+                    caminhoCompleto: resultadoZip.caminhoCompleto
+                  },
+                  performance: {
+                    duracaoGeracaoMs: resultadoZip.duracaoMs,
+                    duracaoTotalMs: duracaoTotalMs,
+                    duracaoGeracaoFormatada: `${(resultadoZip.duracaoMs / 1000).toFixed(2)}s`,
+                    duracaoTotalFormatada: `${(duracaoTotalMs / 1000).toFixed(2)}s`
+                  },
+                  servidor: {
+                    id: interaction.guildId,
+                    nome: interaction.guild?.name
+                  },
+                  canal: {
+                    id: interaction.channelId
+                  },
+                  timestamp: new Date().toISOString(),
+                  categoria: 'discord_comando_logs',
+                  operacao: 'download_zip_sucesso'
+                })
+
+              } else {
+                // Erro na geração do ZIP
+                logger.error("❌ Erro na geração do arquivo ZIP para usuário", {
+                  erro: resultadoZip.error,
+                  usuario: {
+                    id: interaction.user.id,
+                    username: interaction.user.username,
+                    displayName: interaction.member?.displayName || interaction.user.username,
+                    tag: interaction.user.tag
+                  },
+                  duracaoAteErroMs: Date.now() - startTime,
+                  servidor: {
+                    id: interaction.guildId,
+                    nome: interaction.guild?.name
+                  },
+                  categoria: 'discord_comando_logs',
+                  operacao: 'erro_geracao_zip_usuario'
+                })
+                
+                const containerErro = new ContainerBuilder()
+                  .setAccentColor(16711680) // Vermelho
+                  .addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent(`### ${obterEmoji("errado")} Erro ao gerar arquivo`),
+                  )
+                  .addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent(`**Erro:** \`${resultadoZip.error}\`\n\nTente novamente ou entre em contato com o suporte técnico.`),
+                  )
+
+                await interaction.editReply({
+                  content: "",
+                  components: [containerErro],
+                  flags: MessageFlags.IsComponentsV2
+                })
+              }
+
+            } catch (error) {
+              const duracaoTotalMs = Date.now() - startTime
+              
+              // Erro inesperado
+              logger.error("❌ Erro inesperado no processo de download de logs", {
+                erro: error.message,
+                stack: error.stack,
+                errorName: error.name,
+                usuario: {
+                  id: interaction.user.id,
+                  username: interaction.user.username,
+                  displayName: interaction.member?.displayName || interaction.user.username,
+                  tag: interaction.user.tag
+                },
+                performance: {
+                  duracaoAteErroMs: duracaoTotalMs,
+                  duracaoAteErroFormatada: `${(duracaoTotalMs / 1000).toFixed(2)}s`
+                },
+                servidor: {
+                  id: interaction.guildId,
+                  nome: interaction.guild?.name
+                },
+                canal: {
+                  id: interaction.channelId
+                },
+                timestamp: new Date().toISOString(),
+                categoria: 'discord_comando_logs',
+                operacao: 'erro_inesperado_download'
+              })
+              
+              const containerErro = new ContainerBuilder()
+                .setAccentColor(16711680) // Vermelho
+                .addTextDisplayComponents(
+                  new TextDisplayBuilder().setContent(`### ${obterEmoji("errado")} Erro interno`),
+                )
+                .addTextDisplayComponents(
+                  new TextDisplayBuilder().setContent("Ocorreu um erro interno ao processar o download. Tente novamente."),
+                )
+
+              await interaction.editReply({
+                content: "",
+                components: [containerErro],
+                flags: MessageFlags.IsComponentsV2
+              })
+            }
+            
+            return
+          }
+
+          // Handler do botão "Limpar logs"
+          if (interaction.customId === 'clear_logs') {
+            // Verifica se o usuário está autorizado (administrador do bot)
+            const usuarioAutorizado = BOT_ADMIN_DISCORD_USERS_ID.includes(interaction.user.id)
+            
+            logger.info("🗑️ Solicitação de limpeza de logs recebida", {
+              usuario: {
+                id: interaction.user.id,
+                username: interaction.user.username,
+                displayName: interaction.member?.displayName || interaction.user.username,
+                tag: interaction.user.tag
+              },
+              autorizado: usuarioAutorizado,
+              botaoClicado: 'clear_logs',
+              servidor: {
+                id: interaction.guildId,
+                nome: interaction.guild?.name
+              },
+              canal: {
+                id: interaction.channelId,
+                tipo: interaction.channel?.type
+              },
+              timestamp: new Date().toISOString(),
+              categoria: 'discord_comando_logs',
+              operacao: 'solicitacao_limpeza_logs'
+            })
+            
+            if (!usuarioAutorizado) {
+              await interaction.reply({
+                content: `${obterEmoji("errado")} Apenas administradores autorizados podem limpar os logs do sistema.`,
+                flags: MessageFlags.Ephemeral
+              })
+              
+              logger.warn("🚫 Tentativa não autorizada de limpeza de logs via botão", {
+                usuario: {
+                  id: interaction.user.id,
+                  username: interaction.user.username,
+                  tag: interaction.user.tag
+                },
+                servidor: {
+                  id: interaction.guildId,
+                  nome: interaction.guild?.name
+                },
+                canal: {
+                  id: interaction.channelId
+                },
+                motivoNegacao: 'usuario_nao_autorizado',
+                usuariosAutorizados: BOT_ADMIN_DISCORD_USERS_ID.length,
+                timestamp: new Date().toISOString(),
+                categoria: 'discord_comando_logs',
+                operacao: 'limpeza_acesso_negado'
+              })
+              
+              return
+            }
+
+            // Cria container de confirmação
+            const componentsConfirmacao = criarContainerConfirmacaoExclusaoLogs()
+            
+            await interaction.reply({
+              components: componentsConfirmacao,
+              flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral
+            })
+
+            logger.info("🔄 Container de confirmação de exclusão de logs enviado", {
+              usuario: {
+                id: interaction.user.id,
+                username: interaction.user.username,
+                displayName: interaction.member?.displayName || interaction.user.username,
+                tag: interaction.user.tag
+              },
+              containerEnviado: true,
+              categoria: 'discord_comando_logs',
+              operacao: 'confirmacao_exclusao_enviada'
+            })
+            
+            return
+          }
+
+          // Handler do botão "Confirmar exclusão de logs"
+          if (interaction.customId === 'confirm_delete_logs') {
+            const startTime = Date.now()
+            
+            // Verifica novamente se o usuário está autorizado
+            const usuarioAutorizado = BOT_ADMIN_DISCORD_USERS_ID.includes(interaction.user.id)
+            
+            if (!usuarioAutorizado) {
+              await interaction.update({
+                content: `${obterEmoji("errado")} Acesso negado. Apenas administradores autorizados podem executar esta ação.`,
+                components: [],
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral
+              })
+              return
+            }
+
+            // Mensagem de processamento
+            const loadingEmoji = obterEmoji("loading")
+            const containerProcessando = new ContainerBuilder()
+              .setAccentColor(16731904) // Cor laranja da 4.events
+              .addTextDisplayComponents(
+                new TextDisplayBuilder().setContent(`${loadingEmoji} Excluindo todos os arquivos de logs... Por favor, aguarde.`),
+            )
+
+            await interaction.update({
+              content: "",
+              components: [containerProcessando],
+              flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral
+            })
+
+
+            logger.info("🗑️ Iniciando processo de exclusão de logs confirmado pelo usuário", {
+              usuario: {
+                id: interaction.user.id,
+                username: interaction.user.username,
+                displayName: interaction.member?.displayName || interaction.user.username,
+                tag: interaction.user.tag
+              },
+              categoria: 'discord_comando_logs',
+              operacao: 'inicio_exclusao_confirmada'
+            })
+
+            try {
+              // Executa a exclusão dos logs
+              const resultadoExclusao = await excluirTodosLogs()
+              
+              if (resultadoExclusao.success) {
+                // Container de sucesso
+                const containerSucesso = new ContainerBuilder()
+                  .setAccentColor(65280) // Verde
+                  .addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent(`### ${obterEmoji("certo")} Logs excluídos com sucesso!`),
+                  )
+                  .addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent(`**Operação concluída:**\n• Arquivos excluídos: \`${resultadoExclusao.arquivosExcluidos}\`\n• Espaço liberado: \`${resultadoExclusao.tamanhoExcluidoMB} MB\`\n• Tempo de execução: \`${(resultadoExclusao.duracaoMs / 1000).toFixed(2)}s\`\n\n${obterEmoji("certo")} Todos os arquivos de logs foram removidos do sistema.`),
+                  )
+
+                await interaction.editReply({
+                  content: "",
+                  components: [containerSucesso],
+                  flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral
+                })
+
+                logger.info("✅ Exclusão de logs concluída com sucesso via interface", {
+                  usuario: {
+                    id: interaction.user.id,
+                    username: interaction.user.username,
+                    displayName: interaction.member?.displayName || interaction.user.username,
+                    tag: interaction.user.tag
+                  },
+                  resultadoExclusao: resultadoExclusao,
+                  duracaoTotalMs: Date.now() - startTime,
+                  categoria: 'discord_comando_logs',
+                  operacao: 'exclusao_logs_sucesso_interface'
+                })
+
+              } else {
+                // Container de erro
+                const containerErro = new ContainerBuilder()
+                  .setAccentColor(16711680) // Vermelho
+                  .addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent(`### ${obterEmoji("errado")} Erro na exclusão de logs`),
+                  )
+                  .addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent(`**Erro encontrado:**\n\n\`${resultadoExclusao.error}\`\n\n${resultadoExclusao.arquivosExcluidos ? `• **Arquivos excluídos:** \`${resultadoExclusao.arquivosExcluidos}/${resultadoExclusao.totalArquivos}\`` : ''}\n\nTente novamente ou entre em contato com o suporte técnico.`),
+                  )
+
+                await interaction.editReply({
+                  content: "",
+                  components: [containerErro],
+                  flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral
+                })
+
+                logger.error("❌ Erro na exclusão de logs via interface", {
+                  usuario: {
+                    id: interaction.user.id,
+                    username: interaction.user.username,
+                    displayName: interaction.member?.displayName || interaction.user.username,
+                    tag: interaction.user.tag
+                  },
+                  erro: resultadoExclusao.error,
+                  arquivosExcluidos: resultadoExclusao.arquivosExcluidos || 0,
+                  totalArquivos: resultadoExclusao.totalArquivos || 0,
+                  duracaoTotalMs: Date.now() - startTime,
+                  categoria: 'discord_comando_logs',
+                  operacao: 'erro_exclusao_logs_interface'
+                })
+              }
+
+            } catch (error) {
+              // Erro inesperado
+              logger.error("❌ Erro inesperado na exclusão de logs", {
+                erro: error.message,
+                stack: error.stack,
+                errorName: error.name,
+                usuario: {
+                  id: interaction.user.id,
+                  username: interaction.user.username,
+                  displayName: interaction.member?.displayName || interaction.user.username,
+                  tag: interaction.user.tag
+                },
+                duracaoTotalMs: Date.now() - startTime,
+                categoria: 'discord_comando_logs',
+                operacao: 'erro_inesperado_exclusao'
+              })
+              
+              const containerErro = new ContainerBuilder()
+                .setAccentColor(16711680) // Vermelho
+                .addTextDisplayComponents(
+                  new TextDisplayBuilder().setContent(`### ${obterEmoji("errado")} Erro interno`),
+                )
+                .addTextDisplayComponents(
+                  new TextDisplayBuilder().setContent("Ocorreu um erro interno ao processar a exclusão de logs. Tente novamente."),
+                )
+
+              await interaction.editReply({
+                content: "",
+                components: [containerErro],
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral
+              })
+            }
+            
+            return
+          }
+
+          // Handler do botão "Cancelar exclusão de logs"
+          if (interaction.customId === 'cancel_delete_logs') {
+            // Verifica se o usuário está autorizado
+            const usuarioAutorizado = BOT_ADMIN_DISCORD_USERS_ID.includes(interaction.user.id)
+            
+            if (!usuarioAutorizado) {
+              await interaction.update({
+                content: `${obterEmoji("errado")} Acesso negado.`,
+                components: [],
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral
+              })
+              return
+            }
+
+            // Container de cancelamento
+            const containerCancelado = new ContainerBuilder()
+              .setAccentColor(16776960) // Amarelo/laranja
+              .addTextDisplayComponents(
+                new TextDisplayBuilder().setContent(`### ${obterEmoji("info")} Operação cancelada`),
+              )
+              .addTextDisplayComponents(
+                new TextDisplayBuilder().setContent("A exclusão de logs foi **cancelada** pelo usuário.\n\nNenhum arquivo foi removido do sistema."),
+              )
+
+            await interaction.update({
+              content: "",
+              components: [containerCancelado],
+              flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral
+            })
+
+            logger.info("🚫 Exclusão de logs cancelada pelo usuário", {
+              usuario: {
+                id: interaction.user.id,
+                username: interaction.user.username,
+                displayName: interaction.member?.displayName || interaction.user.username,
+                tag: interaction.user.tag
+              },
+              botaoClicado: 'cancel_delete_logs',
+              timestamp: new Date().toISOString(),
+              categoria: 'discord_comando_logs',
+              operacao: 'exclusao_logs_cancelada'
+            })
+            
+            return
+          }
+
       return // Retorna aqui para evitar processar comandos
     }
 
@@ -3094,7 +3991,7 @@ client.on("messageCreate", async (message) => {
       const containerErro = new ContainerBuilder()
         .setAccentColor(16711680) // Vermelho
         .addTextDisplayComponents(
-          new TextDisplayBuilder().setContent(`### ${obterEmoji("errado")} Acesso Negado`),
+          new TextDisplayBuilder().setContent(`### ${obterEmoji("errado")} Acesso negado`),
         )
         .addTextDisplayComponents(
           new TextDisplayBuilder().setContent("**Você não tem permissão para acessar os logs do sistema.**\n\nEste comando é restrito a administradores autorizados do bot."),
@@ -3347,4 +4244,3 @@ process.on("SIGTERM", () => {
 
 // Conecta o bot ao Discord
 client.login(process.env.BOT_TOKEN)
-          

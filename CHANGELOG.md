@@ -9,6 +9,39 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 ### Em Desenvolvimento
 - Funcionalidades futuras serão listadas aqui
 
+## [1.0.11] - 2025-08-31
+
+### ✨ Adicionado
+- **Sistema de Gerenciamento Remoto de Logs**: Implementadas funcionalidades avançadas para gerenciamento dos arquivos de log do sistema de maneira remota (via Discord)
+  - **Download de Logs em ZIP**: Botão para baixar todos os logs do sistema compactados em arquivo ZIP
+    - Compactação inteligente com estatísticas de performance
+    - Limpeza automática de arquivos ZIP anteriores
+    - Interface com feedback de progresso e informações detalhadas
+  - **Exclusão Manual de Logs**: Botão para excluir todos os arquivos de logs existentes
+    - Confirmação obrigatória com interface de aviso
+    - Processo seguro com feedback detalhado sobre arquivos removidos
+    - Informações de espaço liberado e tempo de execução
+  - **Interface Administrativa Aprimorada**: Melhorias na interface do comando oculto de logs
+    - Botões interativos para download e exclusão
+    - Feedback em tempo real para operações de longa duração
+
+### 🔧 Modificado
+- **Comando Oculto de Logs**: Ampliada interface administrativa com novos botões de ação
+  - Adicionados botões "Baixar logs" e "Limpar logs" na interface principal
+
+### 🛡️ Segurança
+- **Controle de Acesso**: Reforçada validação de permissões administrativas para as novas funcionalidades
+  - Verificação em duas etapas de permissões administrativas para operações críticas
+  - Logs detalhados de todas as ações administrativas realizadas
+
+### 📚 Técnico
+- **Funções Auxiliares**: Implementadas novas funções para gerenciamento de arquivos
+  - `gerarZipLogs()`: Função para compressão inteligente de arquivos logs
+  - `excluirTodosLogs()`: Função para exclusão segura de arquivos de log
+  - `criarContainerConfirmacaoExclusaoLogs()`: Interface de confirmação para exclusões
+- **Tratamento de Erros**: Aprimorado sistema de tratamento de erros para operações de arquivo
+- **Logging Detalhado**: Implementado logging granular para todas as operações administrativas
+
 ## [1.0.10] - 2025-08-30
 
 ### ✨ Adicionado

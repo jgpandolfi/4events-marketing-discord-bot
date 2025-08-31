@@ -1,7 +1,17 @@
-# 4.events Marketing Bot 🧡
+<h1 align="center">🟧 4.events Marketing Discord Bot</h1>
 
-Bot do Discord do time de Marketinda 4.events
-Auxilia no gerenciamento de solicitações de tarefas de marketing e acompanhametno de parcerias, de maneira integrada ao N8N. Além dessas funcionalidades principais, também foram implementadas funcionalidades para auxiliar em demais tarefas do dia a dia.
+<p align="center">
+  <img alt="José Guilherme Pandolfi" src="https://img.shields.io/badge/Dev-José%20Guilherme%20Pandolfi-8B3A8B?style=for-the-badge&color=blue">
+  <img alt="User" src="https://img.shields.io/badge/User-4.events-FFD700?style=for-the-badge&color=orange">
+  <img alt="Status" src="https://img.shields.io/badge/Status-Em%20Produção-28A745?style=for-the-badge">
+</p>
+
+<p align="center">
+   Bot do Discord do time de Marketinda 4.events
+   Auxilia no gerenciamento de solicitações de tarefas de marketing e acompanhametno de parcerias, de maneira integrada ao N8N. Além dessas funcionalidades principais, também foram implementadas funcionalidades para auxiliar em demais tarefas do dia a dia.
+</p>
+
+---
 
 ## 📋 Sobre o Projeto
 
@@ -22,10 +32,11 @@ Bot desenvolvido para automatizar e facilitar os processo de solicitação de ta
 - **Validação inteligente de datas**: Aceita múltiplos formatos (DD/MM/AAAA, D/M/AA, etc.)
 - **Integração com N8N**: Envio automático de dados via webhook
 - **Integração com Microsoft Clarity**: Para obter dados de performance e desempenho do website e das landing pages
-- **Resposta com link**: Sempre que possível retorna mensagens com URLs diretas para os sistemas integrados
+- **Resposta com link**: Sempre que possível retorna mensagens com URLs diretas e/ou botões para os sistemas integrados
 - **Sistema de Logs Avançado com Winston**: Logging estruturado avançado com categorização, retenção automática, compressão automática e rotação diária para monitoramento e debugging
 - **Robustez Avançada**: Resistência a falhas temporárias do N8N com backoff progressivo e sistema de retries
 - **Discord Components V2**: O bot utiliza a mais recente tecnologia para criação de conteúdo e interfaces do Discord
+- **Gerenciamento Remoto de Arquivos de Log**: Funcionalidades avançadas para gerenciamento dos arquivos de log do sistema de maneira remota (via Discord)
 
 ## 🚀 Como Usar
 
@@ -152,12 +163,23 @@ O bot conta com um **sistema automático de retry**, para os comandos `/makertin
 - [Discord.js Documentation](https://discord.js.org/)
 - [N8N Documentation](https://docs.n8n.io/)
 
-## 👥 Desenvolvido para 4.events
+## 📄 Licença
 
-Bot criado para otimizar o fluxo de trabalho da equipe de marketing da 4.events.
+Este projeto está sob a licença MIT.
 
 ---
 
-**Status**: ✅ Ativo e funcionando  
-**Versão**: 1.0.10
-**Última atualização**: Agosto 2025
+**Status**: ✅ Ativo e funcionando<br>
+**Versão**: 1.0.11<br>
+**Última atualização**: Agosto 2025<br>
+
+<p align="center">
+  <strong>Desenvolvido com 🧡 para 4.events</strong><br>
+</p>
+
+<p align="center">
+  <img alt="GitHub last commit" src="https://img.shields.io/github/last-commit/jgpandolfi/4events-marketing-discord-bot?style=flat-square">
+  <img alt="GitHub code size" src="https://img.shields.io/github/languages/code-size/jgpandolfi/4events-marketing-discord-bot?style=flat-square">
+  <img alt="GitHub top language" src="https://img.shields.io/github/languages/top/jgpandolfi/4events-marketing-discord-bot?style=flat-square">
+</p>
+
