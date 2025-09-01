@@ -26,6 +26,8 @@ import { zip } from 'zip-a-folder'
 import dotenv from "dotenv"
 import fetch from "node-fetch"
 import logger, { logCommand, logError, logWebhook, logPerformance } from './logger.js'
+import database from './database.js'
+import apiServer from './api.js'
 
 import { createRequire } from "module"
 const require = createRequire(import.meta.url)
@@ -73,6 +75,41 @@ if (!process.env.CLARITY_API_TOKEN) {
 if (!process.env.BOT_ADMIN_DISCORD_USERS_ID) {
   logger.error("❌ Erro: BOT_ADMIN_DISCORD_USERS_ID não está configurado no arquivo .env", { 
     missingConfig: 'BOT_ADMIN_DISCORD_USERS_ID' 
+  })
+  process.exit(1)
+}
+
+if (!process.env.API_PORT) {
+  logger.error("❌ Erro: API_PORT não está configurado no arquivo .env", { 
+    missingConfig: 'API_PORT' 
+  })
+  process.exit(1)
+}
+
+if (!process.env.DB_HOST) {
+  logger.error("❌ Erro: DB_HOST não está configurado no arquivo .env", { 
+    missingConfig: 'DB_HOST' 
+  })
+  process.exit(1)
+}
+
+if (!process.env.DB_USER) {
+  logger.error("❌ Erro: DB_USER não está configurado no arquivo .env", { 
+    missingConfig: 'DB_USER' 
+  })
+  process.exit(1)
+}
+
+if (!process.env.DB_PASSWORD) {
+  logger.error("❌ Erro: DB_PASSWORD não está configurado no arquivo .env", { 
+    missingConfig: 'DB_PASSWORD' 
+  })
+  process.exit(1)
+}
+
+if (!process.env.DB_NAME) {
+  logger.error("❌ Erro: DB_NAME não está configurado no arquivo .env", { 
+    missingConfig: 'DB_NAME' 
   })
   process.exit(1)
 }
@@ -552,6 +589,10 @@ function criarContainerInicialHelp() {
                   .setValue("help_parceria")
                   .setDescription("Como registrar novas parcerias comerciais"),
                 new SelectMenuOptionBuilder()
+                  .setLabel("📊 Comando /leads")
+                  .setValue("help_leads")
+                  .setDescription("Como visualizar dados e estatísticas de leads"),
+                new SelectMenuOptionBuilder()
                   .setLabel("📊 Comando /cro")
                   .setValue("help_cro")
                   .setDescription("Como obter dados de performance e estatísticas"),
@@ -1001,6 +1042,29 @@ const cmdFundoEscritorio = new SlashCommandBuilder()
 const cmdPing = new SlashCommandBuilder()
   .setName("ping")
   .setDescription("🏓 Testa a conectividade do bot")
+
+// Define o comando slash /leads
+const cmdLeads = new SlashCommandBuilder()
+  .setName("leads")
+  .setDescription("📊 Exibe estatísticas e dados dos leads capturados pelas landing pages")
+  .addStringOption((option) =>
+    option
+      .setName("periodo")
+      .setDescription("Período para consulta dos leads (hoje, 7dias, 30dias) - padrão: hoje")
+      .setRequired(false)
+      .addChoices(
+        { name: '🎯 Hoje', value: 'hoje' },
+        { name: '📅 Últimos 7 dias', value: '7dias' },
+        { name: '📈 Últimos 30 dias', value: '30dias' }
+      )
+  )
+  .addStringOption((option) =>
+    option
+      .setName("campanha")
+      .setDescription("Filtrar por campanha específica (opcional)")
+      .setRequired(false)
+      .setMaxLength(255)
+  )
 
 // Define o comando /help
 const cmdHelp = new SlashCommandBuilder()
@@ -1910,6 +1974,13 @@ client.once("ready", async () => {
       categoria: 'discord_bot_startup',
       operacao: 'bot_ready_sucesso'
     })
+
+    // Conecta ao banco de dados
+    await database.connect()
+    
+    // Inicializa e starta a API
+    await apiServer.initialize()
+    await apiServer.start()
     
     // Registra comandos do bot (global)
     await client.application.commands.set([
@@ -1922,6 +1993,7 @@ client.once("ready", async () => {
       cmdCapaLinkedin,
       cmdFundoEscritorio,
       cmdPing,
+      cmdLeads,
       cmdHelp,
     ])
     
@@ -1936,6 +2008,7 @@ client.once("ready", async () => {
         'capa-linkedin',
         'fundo-escritorio',
         'ping',
+        'leads',
         'help'
       ],
       totalComandos: 10,
@@ -3000,6 +3073,43 @@ client.on("interactionCreate", async (interaction) => {
             ]
             break
 
+          case 'help_leads':
+            helpContent = [
+              new ContainerBuilder()
+                .setAccentColor(16731904)
+                .addTextDisplayComponents(
+                  new TextDisplayBuilder().setContent(`### 📊 Comando /leads`),
+                )
+                .addTextDisplayComponents(
+                  new TextDisplayBuilder().setContent("**Descrição:** Exibe estatísticas e dados dos leads capturados pelas landing pages\n\n**Parâmetros (opcionais):**\n• `periodo` - Período para consulta (hoje, 7dias, 30dias) *(padrão: hoje)*\n• `campanha` - Filtrar por campanha específica"),
+                )
+                .addSeparatorComponents(
+                  new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
+                )
+                .addTextDisplayComponents(
+                  new TextDisplayBuilder().setContent("**Exemplos de uso:**\n• `/leads` - Leads de hoje\n• `/leads periodo:7dias` - Leads dos últimos 7 dias\n• `/leads periodo:30dias campanha:black-friday` - Leads filtrados por campanha\n• `/leads campanha:webinar` - Leads de uma campanha específica de hoje"),
+                )
+                .addSeparatorComponents(
+                  new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
+                )
+                .addTextDisplayComponents(
+                  new TextDisplayBuilder().setContent(`${obterEmoji("warn")} **Informações exibidas:**\n• Total de interações e leads únicos\n• Taxa de conversão (CTA → Formulário)\n• Detalhamento por cliques e formulários\n• Top 5 campanhas do período\n• Últimos leads recentes com detalhes`),
+                )
+                .addSeparatorComponents(
+                  new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
+                )
+                .addActionRowComponents(
+                  new ActionRowBuilder()
+                    .addComponents(
+                      new ButtonBuilder()
+                        .setCustomId('help_voltar')
+                        .setLabel('Voltar ao menu principal')
+                        .setStyle(ButtonStyle.Secondary)
+                    ),
+                )
+            ]
+            break
+
           case 'help_cro':
             helpContent = [
               new ContainerBuilder()
@@ -3367,6 +3477,213 @@ client.on("interactionCreate", async (interaction) => {
 
       // Exibir o modal
       await interaction.showModal(modal)
+    }
+
+    // Comando /leads
+    else if (interaction.commandName === "leads") {
+      const periodo = interaction.options.getString("periodo") || "hoje"
+      const campanhaFiltro = interaction.options.getString("campanha")
+      
+      // Mapeia período para dias
+      const periodoDias = {
+        'hoje': 1,
+        '7dias': 7,
+        '30dias': 30
+      }[periodo] || 1
+      
+      const periodoTexto = {
+        'hoje': 'hoje',
+        '7dias': 'últimos 7 dias',
+        '30dias': 'últimos 30 dias'
+      }[periodo] || 'hoje'
+      
+      // Resposta inicial
+      const loadingEmoji = obterEmoji("loading")
+      await interaction.reply(`${loadingEmoji} Coletando dados de leads do período: ${periodoTexto}...`)
+      
+      try {
+        // Buscar dados do banco
+        const [statsResult, topCampaigns, recentLeads] = await Promise.all([
+          database.getLeadsStats(periodoDias, campanhaFiltro),
+          database.getTopCampaigns(periodoDias, 5),
+          database.getRecentLeads(periodoDias, 8)
+        ])
+        
+        if (statsResult.success) {
+          const { clickStats, formStats } = statsResult
+          
+          // Calcular métricas consolidadas
+          const totalInteracoes = (clickStats.total_clicks || 0) + (formStats.total_submissions || 0)
+          const totalEmailsUnicos = new Set([
+            ...(clickStats.emails_unicos ? [clickStats.emails_unicos] : []),
+            ...(formStats.emails_unicos ? [formStats.emails_unicos] : [])
+          ]).size
+          
+          const conversaoRate = clickStats.total_clicks > 0 
+            ? ((formStats.total_submissions / clickStats.total_clicks) * 100).toFixed(1)
+            : '0.0'
+          
+          // Criar container principal
+          const container = new ContainerBuilder()
+            .setAccentColor(16731904) // Cor laranja da 4.events (0xff4f00)
+            .addTextDisplayComponents(
+              new TextDisplayBuilder().setContent(`### ${obterEmoji("usuarios")} Relatório de leads - ${periodoTexto.charAt(0).toUpperCase() + periodoTexto.slice(1)}`),
+            )
+          
+          if (campanhaFiltro) {
+            container.addTextDisplayComponents(
+              new TextDisplayBuilder().setContent(`**Filtro aplicado:** \`${campanhaFiltro}\``),
+            )
+          }
+          
+          container.addSeparatorComponents(
+            new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
+          )
+          .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(`${obterEmoji("planeta")} Cliques em CTA: \`${formatarNumero(clickStats.total_clicks || 0)}\`\n${obterEmoji("pasta")} Formulários Enviados: \`${formatarNumero(formStats.emails_unicos || 0)}\``),
+          )
+
+                    // Adicionar leads recentes se houver dados
+          if (recentLeads.success && recentLeads.leads.length > 0) {
+            container.addSeparatorComponents(
+              new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
+            )
+            .addTextDisplayComponents(
+              new TextDisplayBuilder().setContent(`### ${obterEmoji("relogio")} Leads recentes`),
+            )
+            
+            let leadsTexto = ""
+            recentLeads.leads.slice(0, 6).forEach((lead, index) => {
+              const nome = lead.lead_nome || 'Nome não informado'
+              const email = lead.lead_email || 'Email não informado'
+              const empresa = lead.lead_empresa ? ` (${lead.lead_empresa})` : ''
+              const cidade = lead.lead_cidade ? ` - ${lead.lead_cidade}` : ''
+              const fonte = lead.lead_source === 'form_submit' ? 'Formulário' : 'CTA'
+              const campanha = lead.campaign ? lead.campaign : 'Não informada'
+              const landingPage = lead.landing_page ? lead.landing_page : 'Não informada'
+              const origem = lead.source || 'Não informada'
+              const timestamp = new Date(lead.timestamp).toLocaleString('pt-BR', { 
+                timeZone: 'America/Sao_Paulo',
+                day: '2-digit',
+                month: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit'
+              })
+              
+              leadsTexto += `\`\`\`${index + 1}. ${nome}${empresa}\n   • ${email}${cidade}\n   • Via: ${fonte} em ${timestamp}\n   • Campanha: ${truncarTexto(campanha, 40)}\n   • Origem: ${origem}\n   • Landing: ${truncarTexto(landingPage, 50)}\n\`\`\``
+            })
+            
+            if (leadsTexto) {
+              container.addTextDisplayComponents(
+                new TextDisplayBuilder().setContent(leadsTexto),
+              )
+            }
+          }
+          
+          // Adicionar top campanhas se houver dados
+          if (topCampaigns.success && topCampaigns.campaigns.length > 0) {
+            container.addSeparatorComponents(
+              new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
+            )
+            .addTextDisplayComponents(
+              new TextDisplayBuilder().setContent(`### ${obterEmoji("medalha")} Top campanhas`),
+            )
+            
+            let campanhasTexto = ""
+            const campanhasProcessadas = new Map()
+            
+            topCampaigns.campaigns.forEach((camp, index) => {
+              if (index < 5) {
+                const key = camp.campaign || 'Sem campanha'
+                if (!campanhasProcessadas.has(key)) {
+                  campanhasProcessadas.set(key, {
+                    total_events: 0,
+                    unique_leads: 0
+                  })
+                }
+                
+                const existing = campanhasProcessadas.get(key)
+                existing.total_events += parseInt(camp.total_events || 0)
+                existing.unique_leads += parseInt(camp.unique_leads || 0)
+              }
+            })
+            
+            let pos = 1
+            for (const [campanha, dados] of campanhasProcessadas) {
+              campanhasTexto += `\`\`\`${pos}. ${truncarTexto(campanha, 40)}\n   • Eventos: ${formatarNumero(dados.total_events)} • Leads: ${formatarNumero(dados.unique_leads)}\n\`\`\``
+              pos++
+            }
+            
+            if (campanhasTexto) {
+              container.addTextDisplayComponents(
+                new TextDisplayBuilder().setContent(campanhasTexto),
+              )
+            }
+          }
+          
+          // Resposta final
+          await interaction.editReply({
+            content: "",
+            components: [container],
+            flags: MessageFlags.IsComponentsV2
+          })
+          
+          // Log da consulta bem-sucedida
+          const usuario = {
+            username: interaction.user.username,
+            displayName: interaction.member?.displayName || interaction.user.username,
+            id: interaction.user.id,
+            tag: interaction.user.tag,
+          }
+          
+          logger.info("✅ Dados de leads consultados:", {
+            periodo: periodoTexto,
+            periodoDias: periodoDias,
+            campanhaFiltro: campanhaFiltro,
+            totalInteracoes: totalInteracoes,
+            totalEmailsUnicos: totalEmailsUnicos,
+            conversaoRate: conversaoRate,
+            usuario: {
+              username: usuario.username,
+              displayName: usuario.displayName,
+              id: usuario.id,
+              tag: usuario.tag
+            },
+            timestamp: new Date().toISOString(),
+            categoria: 'discord_leads_consulta',
+            operacao: 'consulta_leads_sucesso'
+          })
+          
+        } else {
+          // Erro nos dados
+          await interaction.editReply({
+            content: `${obterEmoji("errado")} **Erro ao buscar dados de leads**\n\`\`\`Falha na consulta ao banco de dados\`\`\`\nTente novamente ou entre em contato com o suporte.`,
+          })
+        }
+        
+      } catch (error) {
+        // Erro na consulta
+        await interaction.editReply({
+          content: `${obterEmoji("errado")} **Erro ao consultar dados de leads**\n\`\`\`${error.message}\`\`\`\nTente novamente ou entre em contato com o suporte.`,
+        })
+        
+        logger.error("❌ Erro ao consultar dados de leads:", {
+          erro: error.message,
+          stack: error.stack,
+          periodo: periodoTexto,
+          periodoDias: periodoDias,
+          campanhaFiltro: campanhaFiltro,
+          usuario: {
+            username: interaction.user.username,
+            displayName: interaction.member?.displayName || interaction.user.username,
+            id: interaction.user.id,
+            tag: interaction.user.tag
+          },
+          timestamp: new Date().toISOString(),
+          categoria: 'discord_leads_consulta',
+          operacao: 'erro_consultar_leads'
+        })
+      }
     }
 
     // Comando /cro
@@ -4218,7 +4535,7 @@ process.on("uncaughtException", (error) => {
 })
 
 // Encerramento por pedido de shutdown
-process.on("SIGINT", () => {
+process.on("SIGINT", async () => {
   logger.info("🛑 Recebido SIGINT. Encerrando bot...", {
     sinal: 'SIGINT',
     timestamp: new Date().toISOString(),
@@ -4226,11 +4543,19 @@ process.on("SIGINT", () => {
     operacao: 'shutdown_graceful',
     motivo: 'SIGINT_recebido'
   })
+  
+  // Encerra API
+  await apiServer.stop()
+  
+  // Encerra banco
+  await database.close()
+  
+  // Encerra bot Discord
   client.destroy()
   process.exit(0)
 })
 
-process.on("SIGTERM", () => {
+process.on("SIGTERM", async () => {
   logger.info("🛑 Recebido SIGTERM. Encerrando bot...", {
     sinal: 'SIGTERM',
     timestamp: new Date().toISOString(),
@@ -4238,6 +4563,14 @@ process.on("SIGTERM", () => {
     operacao: 'shutdown_graceful',
     motivo: 'SIGTERM_recebido'
   })
+  
+  // Encerra API
+  await apiServer.stop()
+  
+  // Encerra banco
+  await database.close()
+  
+  // Encerra bot Discord
   client.destroy()
   process.exit(0)
 })

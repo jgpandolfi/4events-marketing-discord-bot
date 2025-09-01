@@ -14,6 +14,9 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# Scripts SQL com dados sensíveis
+setup-database.sql
+
 # Logs
 logs
 *.log

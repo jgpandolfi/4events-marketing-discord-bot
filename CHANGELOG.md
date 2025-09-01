@@ -9,6 +9,51 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 ### Em Desenvolvimento
 - Funcionalidades futuras serão listadas aqui
 
+## [1.0.12] - 2025-09-01
+
+### ✨ Adicionado
+- **Sistema Completo de API para Marketing Analytics**: Implementada API REST robusta para captura e análise de dados de marketing com Fastify
+  - **Endpoint `/api/events/pageview`**: Registra visualizações de páginas das landing pages
+  - **Endpoint `/api/events/click-cta-mlg`**: Captura cliques em CTAs com dados completos do lead
+  - **Endpoint `/api/events/submit-form-mlg`**: Registra envios de formulários com informações detalhadas
+  - **Endpoint `/api/reports/events-by-email`**: Consulta histórico de eventos por email específico
+  - **Endpoint `/health`**: Health check completo da API com status do banco e métricas do sistema
+  - **Middleware de segurança**: Helmet para proteção, CORS configurado e rate limiting inteligente
+  - **Validação robusta**: Schemas JSON Schema/Ajv para validação completa de dados de entrada
+
+- **Banco de Dados MySQL Integrado**: Sistema completo de persistência para analytics de marketing
+  - **Tabelas especializadas**: Estruturas otimizadas para pageviews, cliques e conversões
+  - **Índices otimizados**: Performance aprimorada para consultas analíticas
+  - **Conexão pool**: Gerenciamento inteligente de conexões para alta disponibilidade
+  - **Migrations automáticas**: Criação automática de tabelas na inicialização
+
+- **Comando `/leads` Analítico**: Dashboard completo de performance de campanhas via Discord
+  - **Períodos flexíveis**: Análise por hoje, 7 dias ou 30 dias
+  - **Filtros por campanha**: Segmentação específica por campanha de marketing
+  - **Métricas consolidadas**: Total de interações, leads únicos e taxa de conversão
+  - **Top 5 campanhas**: Ranking das campanhas mais performáticas do período
+  - **Leads recentes**: Lista dos últimos leads capturados com detalhes completos
+  - **Análise de conversão**: Taxa CTA → Formulário para otimização de funis
+
+### 🔧 Modificado
+- **Arquitetura do Bot**: Reestruturação para suportar API integrada + MySQL para analytics em tempo real
+- **Sistema de Inicialização**: Startup sequencial (Discord → Database → API) para maior estabilidade
+- **Tratamento de Erros**: Aprimorado para operações de banco de dados e API
+- **Logging**: Logs específicos para operações de API e análises de marketing
+
+### 🛡️ Segurança
+- **Validação de Dados**: Schemas rigorosos para todos os endpoints da API
+- **Sanitização**: Limpeza automática de dados sensíveis nos logs
+- **Rate Limiting**: Proteção contra abuse da API (100 req/min por IP)
+- **Trusted Proxy**: Configuração adequada para deployment em produção
+
+### 📚 Técnico
+- **Fastify Framework**: API de alta performance com plugins oficiais
+- **MySQL2**: Driver moderno com suporte a Promises nativo
+- **Validators Centralizados**: Esquemas reutilizáveis para validação consistente
+- **Pool de Conexões**: Gerenciamento otimizado de recursos do banco
+- **Graceful Shutdown**: Encerramento adequado de API e banco ao finalizar o bot
+
 ## [1.0.11] - 2025-08-31
 
 ### ✨ Adicionado

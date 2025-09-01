@@ -21,6 +21,8 @@ Bot desenvolvido para automatizar e facilitar os processo de solicitação de ta
 
 - **Comando `/marketing`**: Cria solicitações de tarefas com validação de dados
 - **Comando `/parceria`**: Registra novas parcerias comerciais no sistema
+text
+- **Comando `/leads`**: Exibe estatísticas e dados dos leads capturados pelas landing pages com relatórios detalhados
 - **Comando `/cro`**: Obtém dados de desempenho e estatísticas do site e landing pages da 4.events (via Microsoft Clarity)
 - **Comando `/midiakit`**: Acessa o mídia kit oficial da 4.events com logos, ícones e materiais audiovisuais
 - **Comando `/apresentações`**: Acessa apresentações comerciais oficiais em PDF e editáveis online (uso interno)
@@ -32,7 +34,9 @@ Bot desenvolvido para automatizar e facilitar os processo de solicitação de ta
 - **Validação inteligente de datas**: Aceita múltiplos formatos (DD/MM/AAAA, D/M/AA, etc.)
 - **Integração com N8N**: Envio automático de dados via webhook
 - **Integração com Microsoft Clarity**: Para obter dados de performance e desempenho do website e das landing pages
-- **Resposta com link**: Sempre que possível retorna mensagens com URLs diretas e/ou botões para os sistemas integrados
+- **API Fastify Integrada**: Servidor API completo para captura de eventos de marketing (pageviews, cliques, conversões)
+- **Banco MySQL e Relatórios Inteligentes**: Armazena dados de pageviews, cliques e conversões e gera relatórios inteligentes com cruzamento de dados
+- **Resposta com link e/ou botão**: Sempre que possível retorna mensagens com URLs diretas e/ou botões para os sistemas integrados
 - **Sistema de Logs Avançado com Winston**: Logging estruturado avançado com categorização, retenção automática, compressão automática e rotação diária para monitoramento e debugging
 - **Robustez Avançada**: Resistência a falhas temporárias do N8N com backoff progressivo e sistema de retries
 - **Discord Components V2**: O bot utiliza a mais recente tecnologia para criação de conteúdo e interfaces do Discord
@@ -76,6 +80,7 @@ Bot desenvolvido para automatizar e facilitar os processo de solicitação de ta
 |---------|-----------|------------|
 | `/marketing` | Cria tarefa de marketing | **Modal com formulário** |
 | `/parceria` | Registra parceria comercial | **Modal com formulário** |
+| `/leads` | Exibe dados e estatísticas de leads | `periodo` (opcional), `campanha` (opcional) |
 | `/cro` | Dados de performance e estatísticas | `data_desejada` (opcional), `final_da_url_desejada` (opcional) |
 | `/midiakit` | Acessa mídia kit oficial | Nenhum |
 | `/apresentações` | Acessa apresentações comerciais | Nenhum |
@@ -94,6 +99,65 @@ O bot conta com um **sistema automático de retry**, para os comandos `/makertin
 - **Backoff progressivo**: Delays inteligentes entre tentativas (1s → 1.5s → 2.25s)
 - **Detecção do tipo de erro**: Distingue erros temporários de permanentes
 - **Transparência**: Feedback claro para o usuário caso haja erros na operação
+
+## 🔗 Endpoints da API
+
+### Eventos de Landing Pages
+
+| Endpoint | Método | Descrição |
+|----------|---------|-----------|
+| `/api/events/pageview` | POST | Registra visualização de página |
+| `/api/events/click-cta-mlg` | POST | Registra clique no CTA |
+| `/api/events/submit-form-mlg` | POST | Registra envio de formulário |
+| `/api/reports/events-by-email` | GET | Consulta eventos por email |
+| `/health` | GET | Health check da API |
+
+## 🏛️ Arquitetura do Projeto
+
+### Representação Gráfica
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   DISCORD BOT   │    │   FASTIFY API   │    │   EXTERNAL APIs │
+│                 │    │   (PORT 3000)   │    │                 │
+│ • /marketing    │◄──►│ • Rate Limiting │◄──►│ • Microsoft     │
+│ • /parceria     │    │ • CORS & Helmet │    │   Clarity       │
+│ • /leads        │    │ • JSON Schemas  │    │ • N8N Webhooks  │
+│ • /cro          │    │ • Health Check  │    │ • Pipe.run      │
+│ • /help         │    │                 │    │                 │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+         │                       │                       │
+         │                       │                       │
+         └───────────────────────┼───────────────────────┘
+                                 │
+                    ┌──────────────────┐
+                    │  MySQL DATABASE  │
+                    │ 4events_marketing│
+                    │                  │
+                    │  pageview_events │──── • session_id
+                    │                  │     • page_url
+                    │                  │     • user_ip
+                    │                  │     • timestamp
+                    │                  │
+                    │ click_cta_events │──── • lead_email
+                    │                  │     • lead_cidade
+                    │                  │     • campaign
+                    │                  │     • source/medium
+                    │                  │
+                    │submit_form_events│──── • lead_dados
+                    │                  │     • conversões
+                    │                  │     • landing_page
+                    │                  │     • tracking_utm
+                    └──────────────────┘
+                               │
+                    ┌──────────────────┐
+                    │   WINSTON LOGS   │
+                    │                  │
+                    │ • Daily Rotate   │
+                    │ • Commands Log   │
+                    │ • Error Log      │
+                    │ • Exceptions     │
+                    └──────────────────┘
+```
 
 ## ⚙️ Instalação (Devs 👨‍💻)
 
@@ -138,20 +202,29 @@ O bot conta com um **sistema automático de retry**, para os comandos `/makertin
 │   ├── 4events-bot-exceptions-YYYY-MM-DD.log # Logs de exceções
 │   └── 4events-bot-rejections-YYYY-MM-DD.log # Logs de promises rejeitadas
 ├── src/
-│   ├── index.js      # Arquivo principal do bot
-│   ├── logger.js     # Configuração do sistema de logging com Winston
-│   └── emojis.json   # Configuração de emojis personalizados
-├── .env              # Variáveis de ambiente (não commitado)
-├── .env.example      # Arquivo de exemplo/documentação do .env
-├── CHANGELOG.md      # Histórico de versões e mudanças
-├── package.json      # Dependências do projeto
-├── package-lock.json # Lock das versões das dependências
-└── README.md         # Este arquivo
+│   ├── index.js                 # Arquivo principal do bot
+│   ├── api.js                   # Servidor API Fastify
+│   ├── database.js              # Gerenciamento do banco MySQL
+│   ├── logger.js                # Sistema de logging com Winston
+│   ├── validators.js            # Schemas de validação para API
+│   └── emojis.json              # Emojis personalizados
+├── .env                         # Variáveis de ambiente (não commitado)
+├── .env.example                 # Exemplo de configuração
+├── setup-database.sql           # Script de configuração do MySQL (não commitado)
+├── setup-database.sql.example   # Exemplo de script de configuração do MySQL
+├── CHANGELOG.md                 # Histórico de versões
+├── package.json                 # Dependências do projeto
+└── README.md                    # Esta documentação
 ```
 ## 🛠️ Tecnologias Utilizadas
 
 - **Node.js** - Runtime JavaScript
 - **Discord.js v14** - Biblioteca para interação com Discord API
+- **Fastify** - Framework web rápido para APIs Node.js
+- **MySQL2** - Driver MySQL para Node.js
+- **@fastify/cors** - CORS para Fastify
+- **@fastify/helmet** - Segurança para Fastify
+- **@fastify/rate-limit** - Rate limiting para APIs
 - **N8N** - Automação de workflows
 - **Microsoft Clarity Data Export API** - Obtenção de dados e estatísticas de CRO
 - **Winston + Winston Daily Rotate File** - Sistema de logging estruturado com rotação diária de arquivos
@@ -170,8 +243,8 @@ Este projeto está sob a licença MIT.
 ---
 
 **Status**: ✅ Ativo e funcionando<br>
-**Versão**: 1.0.11<br>
-**Última atualização**: Agosto 2025<br>
+**Versão**: 1.0.12<br>
+**Última atualização**: Setembro 2025<br>
 
 <p align="center">
   <strong>Desenvolvido com 🧡 para 4.events</strong><br>

@@ -1,0 +1,24 @@
+-- Configuração do banco de dados para o 4.events Bot
+-- Nome do banco: 4events_marketing
+-- Usuário: discord_bot
+
+-- Criar banco de dados
+CREATE DATABASE IF NOT EXISTS `4events_marketing`
+CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- Criar usuário para o bot
+CREATE USER IF NOT EXISTS 'discord_bot'@'localhost' 
+IDENTIFIED BY 'Senha_do_usuario_do_bd@123';
+
+-- Conceder privilégios completos no banco específico
+GRANT ALL PRIVILEGES ON `4events_marketing`.* TO 'discord_bot'@'localhost';
+
+-- Aplicar mudanças
+FLUSH PRIVILEGES;
+
+-- Usar o banco criado
+USE `4events_marketing`;
+
+-- Verificar configuração
+SHOW TABLES;
+SELECT DATABASE() as 'Banco Atual';
