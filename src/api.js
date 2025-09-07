@@ -11,6 +11,10 @@ import {
   emailQuerySchema 
 } from './validators.js'
 
+import { createRequire } from "module"
+const require = createRequire(import.meta.url)
+const packageJson = require("../package.json")
+
 class ApiServer {
   constructor() {
     this.fastify = null
@@ -69,15 +73,41 @@ class ApiServer {
   }
 
   async registerRoutes() {
+    // Rota raiz
+    this.fastify.get('/', async (request, reply) => {
+      return {
+        service: '4.events Marketing Bot API',
+        version: packageJson.version,
+        status: 'online',
+        timestamp: new Date().toISOString(),
+        message: 'API em funcionamento',
+        endpoints: [
+          '/health',
+          '/api/events/pageview',
+          '/api/events/click-cta-mlg', 
+          '/api/events/submit-form-mlg',
+          '/api/reports/events-by-email'
+        ]
+      }
+    })
+
     // Rota de health check
     this.fastify.get('/health', async (request, reply) => {
       return {
         status: 'ok',
+        service: '4.events Marketing Bot API',
+        version: packageJson.version,
         timestamp: new Date().toISOString(),
         database: database.isConnected ? 'connected' : 'disconnected',
         uptime: process.uptime(),
         memory: process.memoryUsage(),
-        version: '1.0.12'
+        endpoints: [
+          '/health',
+          '/api/events/pageview',
+          '/api/events/click-cta-mlg', 
+          '/api/events/submit-form-mlg',
+          '/api/reports/events-by-email'
+        ]
       }
     })
 

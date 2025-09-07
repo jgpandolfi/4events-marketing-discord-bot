@@ -9,6 +9,60 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 ### Em Desenvolvimento
 - Funcionalidades futuras serão listadas aqui
 
+## [1.0.13] - 2025-09-07
+
+### ✨ Adicionado
+- **Sistema Inteligente de Cloudflare Tunnel**: Implementação completa de gerenciamento de túneis para exposição pública da API Fastify via Cloudflare com URL/DNS
+  - **Exposição da API via URL/DNS em vez de IP**: Design para facilitar a comunicação com a API utilizando URL/DNS em vez de um endereço IP variável
+  - **Proteção Avançada**: Sistema de proteção que utiliza Cloudflare contra ataques DDoS, conexões maliciosas e tráfego de crawlers
+  - **URL Fixa Prioritária**: Sistema que prioriza uso de URL fixa do Cloudflare (com domínio) quando disponível
+  - **Verificação de Saúde da URL Fixa**: Health check automático da URL fixa via endpoint `/health`
+  - **Monitoramento Contínuo**: Monitoramento periódico (30 min) da disponibilidade da URL fixa
+  - **Tunnel Temporário Inteligente**: Criação automática de tunnel temporário (URL temporária) quando a URL fixa estiver indisponível
+  - **Sistema de Fallback**: Alternância automática entre URL fixa e tunnel temporário, conforme necessário
+  - **Detecção de Mudança de Status**: Logs automáticos quando URL fixa fica ativa/inativa
+
+- **Classe CloudflareTunnel Completa** (`tunnel.js`):
+  - **checkFixedUrlHealth()**: Verifica disponibilidade da URL fixa via health check
+  - **startFixedUrlMonitoring()**: Inicia monitoramento contínuo da URL fixa
+  - **start()**: Inicialização do sistema inteligente de túneis Cloudflare priorizando URL fixa
+  - **getUrl()**: Retorna a URL ativa (fixa ou temporária)
+  - **getStatus()**: Status completo do sistema de tunnels
+
+### 🔧 Modificado
+- **Inicialização do Bot**: Integração completa do sistema de tunnel no startup
+  - **Verificação de Ambiente**: Tunnel habilitado apenas em produção e quando configurado
+  - **Logs Detalhados**: Logging específico para todas as operações de tunnel
+  - **Configuração Flexível**: Sistema configurável via variáveis de ambiente
+
+- **Graceful Shutdown**: Encerramento adequado do tunnel e monitoramento ao finalizar bot
+- **Validação de Configuração**: Verificação inteligente das variáveis de ambiente do tunnel
+
+### 🛡️ Segurança
+- **Exposição Segura da API**: API acessível publicamente apenas via URLs protegidas pelo Cloudflare
+- **Health Check Seguro**: Verificações automáticas de saúde da API sem exposição de dados sensíveis
+
+### 📚 Técnico
+- **Variáveis de Ambiente Adicionadas**:
+  - `TUNNEL_ENABLED`: Habilita/desabilita criação do tunnel (padrão: true)
+  - `URL_FIXA_DOMINIO`: URL fixa do Cloudflare para usar quando disponível
+  - Validação automática de configuração em ambiente de produção
+
+- **Logging Estruturado**: Logs categorizados para operações de tunnel:
+  - `cloudflare_tunnel`: Categoria principal de operações
+  - `url_fixa_ativa/inativa`: Status da URL fixa
+  - `tunnel_temporario_ativo`: Status do tunnel temporário
+  - `monitoramento_url_fixa`: Operações de monitoramento
+
+- **Dependências**: Integração com `cloudflared` CLI para criação de tunnels temporários
+- **Fetch Integration**: Verificações HTTP para health check da URL fixa
+- **Interval Management**: Gerenciamento inteligente de intervalos de monitoramento
+
+### 🚀 Performance
+- **Verificação Eficiente**: Health checks com timeout de 10 segundos
+- **Monitoramento Otimizado**: Verificações periódicas a cada 30 minutos
+- **Logs Inteligentes**: Logs apenas em mudanças de status para reduzir verbosidade
+
 ## [1.0.12] - 2025-09-01
 
 ### ✨ Adicionado

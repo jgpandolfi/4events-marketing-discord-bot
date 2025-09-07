@@ -35,6 +35,7 @@ text
 - **Integração com N8N**: Envio automático de dados via webhook
 - **Integração com Microsoft Clarity**: Para obter dados de performance e desempenho do website e das landing pages
 - **API Fastify Integrada**: Servidor API completo para captura de eventos de marketing (pageviews, cliques, conversões)
+- **Sistema de Cloudflare Inteligente**: Exposição pública da API Fastify apenas via URLs protegidas pelo Cloudflare (URL fixa ou URL temporária)
 - **Banco MySQL e Relatórios Inteligentes**: Armazena dados de pageviews, cliques e conversões e gera relatórios inteligentes com cruzamento de dados
 - **Resposta com link e/ou botão**: Sempre que possível retorna mensagens com URLs diretas e/ou botões para os sistemas integrados
 - **Sistema de Logs Avançado com Winston**: Logging estruturado avançado com categorização, retenção automática, compressão automática e rotação diária para monitoramento e debugging
@@ -112,13 +113,25 @@ O bot conta com um **sistema automático de retry**, para os comandos `/makertin
 | `/api/reports/events-by-email` | GET | Consulta eventos por email |
 | `/health` | GET | Health check da API |
 
+## 🔥 Sistema de Cloudflare Inteligente
+
+O bot implementa um sistema avançado de tunneling para uso do Cloudflare para proteção da API:
+
+- **API disponível via URL/DNS em vez de IP**: Conexão a API facilitada através de URL/DNS em vez de IPs dinâmicos
+- **URL Fixa Prioritária**: Verifica automaticamente se a URL fixa principal (domínio fixo) está funcional
+- **Tunnel Temporário**: Cria tunnel Cloudflare temporário (URL temporária) caso a URL fixa não esteja disponível  
+- **Monitoramento Contínuo**: Verifica periodicamente o status da URL fixa (padrão: 30min)
+- **Fallback Automático**: Alterna entre URL fixa e tunnel temporário conforme necessário
+- **Proteção 100%**: Exposição pública da API apenas via URLs protegidas pelo Cloudflare, com sistemas Anti-DDoS e de proteção contra acessos maliciosos.
+
+
 ## 🏛️ Arquitetura do Projeto
 
 ### Representação Gráfica
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
 │   DISCORD BOT   │    │   FASTIFY API   │    │   EXTERNAL APIs │
-│                 │    │   (PORT 3000)   │    │                 │
+│                 │    │   (CLOUFLARED)  │    │                 │
 │ • /marketing    │◄──►│ • Rate Limiting │◄──►│ • Microsoft     │
 │ • /parceria     │    │ • CORS & Helmet │    │   Clarity       │
 │ • /leads        │    │ • JSON Schemas  │    │ • N8N Webhooks  │
@@ -206,6 +219,7 @@ O bot conta com um **sistema automático de retry**, para os comandos `/makertin
 │   ├── api.js                   # Servidor API Fastify
 │   ├── database.js              # Gerenciamento do banco MySQL
 │   ├── logger.js                # Sistema de logging com Winston
+│   ├── tunnel.js                # Cloudflare Tunnel
 │   ├── validators.js            # Schemas de validação para API
 │   └── emojis.json              # Emojis personalizados
 ├── .env                         # Variáveis de ambiente (não commitado)
@@ -221,6 +235,7 @@ O bot conta com um **sistema automático de retry**, para os comandos `/makertin
 - **Node.js** - Runtime JavaScript
 - **Discord.js v14** - Biblioteca para interação com Discord API
 - **Fastify** - Framework web rápido para APIs Node.js
+- **Cloudflared** - Cliente oficial para Cloudflare Tunnel
 - **MySQL2** - Driver MySQL para Node.js
 - **@fastify/cors** - CORS para Fastify
 - **@fastify/helmet** - Segurança para Fastify
@@ -243,7 +258,7 @@ Este projeto está sob a licença MIT.
 ---
 
 **Status**: ✅ Ativo e funcionando<br>
-**Versão**: 1.0.12<br>
+**Versão**: 1.0.13<br>
 **Última atualização**: Setembro 2025<br>
 
 <p align="center">

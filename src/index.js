@@ -28,6 +28,7 @@ import fetch from "node-fetch"
 import logger, { logCommand, logError, logWebhook, logPerformance } from './logger.js'
 import database from './database.js'
 import apiServer from './api.js'
+import tunnel from './tunnel.js'
 
 import { createRequire } from "module"
 const require = createRequire(import.meta.url)
@@ -112,6 +113,21 @@ if (!process.env.DB_NAME) {
     missingConfig: 'DB_NAME' 
   })
   process.exit(1)
+}
+
+if (process.env.NODE_ENV === 'production' && !process.env.TUNNEL_ENABLED) {
+  logger.warn("⚠️ TUNNEL_ENABLED não está configurado no arquivo .env", { 
+    configuracao: 'TUNNEL_ENABLED',
+    valorPadrao: 'false',
+    categoria: 'validacao_config'
+  })
+}
+
+if (process.env.NODE_ENV === 'production' && process.env.TUNNEL_ENABLED === 'true' && !process.env.URL_FIXA_DOMINIO) {
+  logger.warn("⚠️ URL_FIXA_DOMINIO não está configurada no arquivo .env", { 
+    configuracao: 'URL_FIXA_DOMINIO',
+    categoria: 'validacao_config'
+  })
 }
 
 // Configuração da webhook do N8N
@@ -1981,6 +1997,39 @@ client.once("ready", async () => {
     // Inicializa e starta a API
     await apiServer.initialize()
     await apiServer.start()
+
+    // Inicia o Cloudflare Tunnel
+    if (process.env.NODE_ENV === 'production' && process.env.TUNNEL_ENABLED === 'true') {
+      try {
+        const publicUrl = await tunnel.start(parseInt(process.env.API_PORT) || 3000)
+        
+        logger.info('🌐 API disponível publicamente via Cloudflare Tunnel', {
+          urlPublica: publicUrl,
+          urlLocal: `http://localhost:${process.env.API_PORT || 3000}`,
+          categoria: 'api_publicacao',
+          operacao: 'tunnel_configurado'
+        })
+
+      } catch (error) {
+        logger.error('❌ Erro ao configurar Cloudflare Tunnel:', {
+          erro: error.message,
+          categoria: 'api_publicacao',
+          operacao: 'erro_tunnel'
+        })
+      }
+    } else {
+      const motivo = process.env.NODE_ENV !== 'production' 
+        ? `NODE_ENV=${process.env.NODE_ENV || 'undefined'}` 
+        : `TUNNEL_ENABLED=${process.env.TUNNEL_ENABLED || 'undefined'}`
+        
+      logger.info('📴 Criação do Cloudflare Tunnel ignorada (configuração .env)', {
+        motivo: motivo,
+        nodeEnv: process.env.NODE_ENV || 'undefined',
+        tunnelEnabled: process.env.TUNNEL_ENABLED || 'undefined',
+        categoria: 'api_publicacao',
+        operacao: 'tunnel_ignorado'
+      })
+    }
     
     // Registra comandos do bot (global)
     await client.application.commands.set([
@@ -4543,6 +4592,9 @@ process.on("SIGINT", async () => {
     operacao: 'shutdown_graceful',
     motivo: 'SIGINT_recebido'
   })
+
+  // Parar o Cloudflare tunnel antes de encerrar
+  tunnel.stop()
   
   // Encerra API
   await apiServer.stop()
@@ -4563,6 +4615,9 @@ process.on("SIGTERM", async () => {
     operacao: 'shutdown_graceful',
     motivo: 'SIGTERM_recebido'
   })
+
+  // Parar o Cloudflare tunnel antes de encerrar
+  tunnel.stop()
   
   // Encerra API
   await apiServer.stop()
