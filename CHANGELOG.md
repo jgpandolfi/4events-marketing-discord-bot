@@ -9,6 +9,21 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 ### Em Desenvolvimento
 - Funcionalidades futuras serão listadas aqui
 
+## [1.0.14] - 2025-09-08
+
+### ✨ Adicionado
+- **Comando `/botstatus` Detalhado**: Novo comando para verificação completa de status e informações do bot
+  - **Informações de Conectividade**: Status das conexões Discord API, MySQL e servidor Fastify API
+  - **Métricas de Performance**: Latência (ping), uptime formatado e uso de memória/CPU em tempo real
+  - **Detalhes de Software**: Versões do Node.js, Discord.js, NPM, Bot e MySQL
+  - **Informações de Sistema**: Dados completos do sistema operacional, arquitetura e hostname
+  - **Especificações de Hardware**: Modelo da CPU, número de cores/threads e estatísticas de RAM
+  - **Status do Cloudflare Tunnel**: Informações sobre URL fixa, tunnel temporário e monitoramento
+
+### 🔧 Modificado
+- **Sistema de Comandos**: Integração completa do novo comando `/botstatus` no sistema de registro global
+- **Comando `/help`**: Atualizada documentação para incluir informações sobre o novo comando de status
+
 ## [1.0.13] - 2025-09-07
 
 ### ✨ Adicionado

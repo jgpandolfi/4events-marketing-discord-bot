@@ -32,6 +32,7 @@ import tunnel from './tunnel.js'
 
 import { createRequire } from "module"
 const require = createRequire(import.meta.url)
+const packageJson = require("../package.json")
 const emojis = require("./emojis.json")
 
 dotenv.config()
@@ -609,6 +610,10 @@ function criarContainerInicialHelp() {
                   .setValue("help_leads")
                   .setDescription("Como visualizar dados e estatísticas de leads"),
                 new SelectMenuOptionBuilder()
+                .setLabel("🤖 Comando /botstatus")
+                .setValue("help_botstatus")
+                .setDescription("Como verificar o status detalhado do bot"),
+                new SelectMenuOptionBuilder()
                   .setLabel("📊 Comando /cro")
                   .setValue("help_cro")
                   .setDescription("Como obter dados de performance e estatísticas"),
@@ -1058,6 +1063,11 @@ const cmdFundoEscritorio = new SlashCommandBuilder()
 const cmdPing = new SlashCommandBuilder()
   .setName("ping")
   .setDescription("🏓 Testa a conectividade do bot")
+
+// Define o comando slash /botstatus
+const cmdBotStatus = new SlashCommandBuilder()
+  .setName("botstatus")
+  .setDescription("📊 Exibe informações detalhadas de status e performance do bot")
 
 // Define o comando slash /leads
 const cmdLeads = new SlashCommandBuilder()
@@ -1977,6 +1987,22 @@ function formatarNumero(numero) {
   return new Intl.NumberFormat('pt-BR').format(numero)
 }
 
+// Função para formatar uptime em formato legível
+function formatUptime(uptimeSeconds) {
+  const days = Math.floor(uptimeSeconds / 86400)
+  const hours = Math.floor((uptimeSeconds % 86400) / 3600)
+  const minutes = Math.floor((uptimeSeconds % 3600) / 60)
+  const seconds = Math.floor(uptimeSeconds % 60)
+  
+  const parts = []
+  if (days > 0) parts.push(`${days}d`)
+  if (hours > 0) parts.push(`${hours}h`)
+  if (minutes > 0) parts.push(`${minutes}m`)
+  if (seconds > 0 || parts.length === 0) parts.push(`${seconds}s`)
+  
+  return parts.join(' ')
+}
+
 // Evento: Bot está pronto
 client.once("ready", async () => {
   try {
@@ -2042,6 +2068,7 @@ client.once("ready", async () => {
       cmdCapaLinkedin,
       cmdFundoEscritorio,
       cmdPing,
+      cmdBotStatus,
       cmdLeads,
       cmdHelp,
     ])
@@ -2057,6 +2084,7 @@ client.once("ready", async () => {
         'capa-linkedin',
         'fundo-escritorio',
         'ping',
+        'botstatus',
         'leads',
         'help'
       ],
@@ -3158,6 +3186,43 @@ client.on("interactionCreate", async (interaction) => {
                 )
             ]
             break
+          
+          case 'help_botstatus':
+            helpContent = [
+              new ContainerBuilder()
+                .setAccentColor(16731904)
+                .addTextDisplayComponents(
+                  new TextDisplayBuilder().setContent(`### 🤖 Comando /botstatus`),
+                )
+                .addTextDisplayComponents(
+                  new TextDisplayBuilder().setContent("**Descrição:** Exibe informações detalhadas sobre o status e saúde do bot\n\n**Como usar:** Digite `/botstatus` para obter um relatório completo"),
+                )
+                .addSeparatorComponents(
+                  new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
+                )
+                .addTextDisplayComponents(
+                  new TextDisplayBuilder().setContent("**Informações fornecidas:**\n• Status das conexões (Discord, banco, API)\n• Tempo online e latência\n• Uso de memória e versão\n• Informações do Cloudflare Tunnel\n• Estatísticas do servidor"),
+                )
+                .addSeparatorComponents(
+                  new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
+                )
+                .addTextDisplayComponents(
+                  new TextDisplayBuilder().setContent(`${obterEmoji("info")} **Disponível para todos os usuários** - não requer permissões especiais`),
+                )
+                .addSeparatorComponents(
+                  new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
+                )
+                .addActionRowComponents(
+                  new ActionRowBuilder()
+                    .addComponents(
+                      new ButtonBuilder()
+                        .setCustomId('help_voltar')
+                        .setLabel('Voltar ao menu principal')
+                        .setStyle(ButtonStyle.Secondary)
+                    ),
+                )
+            ]
+            break
 
           case 'help_cro':
             helpContent = [
@@ -3974,6 +4039,282 @@ client.on("interactionCreate", async (interaction) => {
           categoria: 'discord_clarity_consulta',
           operacao: 'erro_consultar_clarity_api'
         })
+      }
+    }
+
+    // Comando /botstatus
+    else if (interaction.commandName === "botstatus") {
+      try {
+        const startTime = Date.now()
+        
+        // Imports necessários para as novas funcionalidades
+        const os = require('os')
+        const { exec } = require('child_process')
+        const util = require('util')
+        const execPromise = util.promisify(exec)
+        
+        // Coleta informações do sistema
+        const botLatency = Math.round(client.ws.ping)
+        const botUptime = process.uptime()
+        const memoryUsage = process.memoryUsage()
+        
+        // Formatar uptime
+        const uptimeFormatted = formatUptime(botUptime)
+        
+        // Status da conexão Discord
+        const discordStatus = client.ws.status === 0 ? "🟢 Conectado" : "🔴 Desconectado"
+        
+        // Status do banco de dados
+        const dbStatus = database.isConnected ? "🟢 Conectado" : "🔴 Desconectado"
+        
+        // Status da API
+        const apiStatus = apiServer.isRunning ? "🟢 Online" : "🔴 Offline"
+        
+        // Status do Cloudflare Tunnel
+        const tunnelStatus = tunnel.getStatus()
+        let tunnelInfo = "🔴 Inativo"
+        if (tunnelStatus.activeUrl) {
+          if (tunnelStatus.isFixedUrlActive) {
+            tunnelInfo = "🟢 URL Fixa Ativa"
+          } else if (tunnelStatus.tunnelUrl) {
+            tunnelInfo = "🟡 Tunnel Temporário Ativo"
+          }
+        }
+        
+        // Formatação da memória
+        const memoryMB = (memoryUsage.rss / 1024 / 1024).toFixed(1)
+        
+        // Informações do sistema operacional
+        const osInfo = {
+          platform: os.platform(),
+          release: os.release(),
+          arch: os.arch(),
+          hostname: os.hostname()
+        }
+        
+        // Informações de CPU
+        const cpus = os.cpus()
+        const cpuModel = cpus[0].model
+        const cpuCores = cpus.length
+        
+        // Calcular uso médio de CPU
+        const calculateCpuUsage = () => {
+          const cpus = os.cpus()
+          let totalIdle = 0
+          let totalTick = 0
+          
+          cpus.forEach(cpu => {
+            for (const type in cpu.times) {
+              totalTick += cpu.times[type]
+            }
+            totalIdle += cpu.times.idle
+          })
+          
+          const idle = totalIdle / cpus.length
+          const total = totalTick / cpus.length
+          const usage = 100 - ~~(100 * idle / total)
+          return usage
+        }
+        
+        const cpuUsage = calculateCpuUsage()
+        
+        // Função para obter versões e informações adicionais
+        const getSystemInfo = async () => {
+          try {
+            // Versão do NPM
+            let npmVersion = 'N/A'
+            try {
+              const { stdout } = await execPromise('npm --version')
+              npmVersion = stdout.trim()
+            } catch (error) {
+              logger.warn('Não foi possível obter versão do NPM', { erro: error.message })
+            }
+            
+            // Versão do Discord.js
+            const discordJsVersion = require('discord.js').version || packageJson.dependencies['discord.js']?.replace('^', '') || 'N/A'
+            
+            // Versão do MySQL
+            let mysqlVersion = 'N/A'
+            try {
+              if (database.isConnected) {
+                const connection = await database.pool.getConnection()
+                const [rows] = await connection.execute('SELECT VERSION() as version')
+                mysqlVersion = rows[0].version.split('-')[0] // Remove detalhes extras
+                connection.release()
+              }
+            } catch (error) {
+              logger.warn('Não foi possível obter versão do MySQL', { erro: error.message })
+            }
+            
+            // Informações de memória do sistema
+            const totalMemoryGB = (os.totalmem() / 1024 / 1024 / 1024).toFixed(1)
+            const freeMemoryGB = (os.freemem() / 1024 / 1024 / 1024).toFixed(1)
+            const usedMemoryGB = (totalMemoryGB - freeMemoryGB).toFixed(1)
+            
+            return {
+              npmVersion,
+              discordJsVersion,
+              mysqlVersion,
+              totalMemoryGB,
+              freeMemoryGB,
+              usedMemoryGB
+            }
+          } catch (error) {
+            logger.error('Erro ao obter informações do sistema:', {
+              erro: error.message,
+              stack: error.stack
+            })
+            return {
+              npmVersion: 'N/A',
+              discordJsVersion: 'N/A',
+              mysqlVersion: 'N/A',
+              totalMemoryGB: 'N/A',
+              freeMemoryGB: 'N/A',
+              usedMemoryGB: 'N/A'
+            }
+          }
+        }
+        
+        // Obter informações do sistema
+        const systemInfo = await getSystemInfo()
+        
+        // Criar container base
+        const components = [
+          new ContainerBuilder()
+            .setAccentColor(16731904) // Cor laranja da 4.events
+            .addTextDisplayComponents(
+              new TextDisplayBuilder().setContent(`### ${obterEmoji("sistema")} Status do Bot 4.events marketing`),
+            )
+            .addTextDisplayComponents(
+              new TextDisplayBuilder().setContent("Informações gerais sobre a saúde e funcionamento do sistema:"),
+            )
+        ]
+        
+        // PRIMEIRO: Seção Cloudflare (se houver informações do tunnel)
+        if (tunnelStatus.activeUrl) {
+          components[0]
+            .addSeparatorComponents(
+              new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
+            )
+            .addTextDisplayComponents(
+              new TextDisplayBuilder().setContent(`### 🔥 Cloudflare`),
+            )
+            .addTextDisplayComponents(
+              new TextDisplayBuilder().setContent(`Cloudflare status: ${tunnelInfo}\nTúnel ativo: [Acessar API](${tunnelStatus.activeUrl})\nTipo da URL: ${tunnelStatus.isFixedUrlActive ? 'URL fixa (domínio principal)' : 'URL temporária'}\nStatus de /health: ${tunnelStatus.isFixedUrlActive ? '🟢 Monitorado' : '🟡 Básico'}`),
+            )
+        }
+        
+        // SEGUNDO: Seção Conectividade
+        components[0]
+          .addSeparatorComponents(
+            new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
+          )
+          .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(`### ${obterEmoji("connection")} Conectividade`),
+          )
+          .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(`Latência (ping) do bot: \`${botLatency}ms\`\nDiscord API: ${discordStatus}\nBanco de dados MySQL: ${dbStatus}\nServidor API Fastify: ${apiStatus}`),
+          )
+        
+        // TERCEIRO: Seção Sistema (expandida)
+        components[0]
+          .addSeparatorComponents(
+            new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
+          )
+          .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(`### ${obterEmoji("uptime")} Sistema`),
+          )
+          .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(`**Runtime:**\nUp-time: \`${uptimeFormatted}\`\nUso de RAM (bot): \`${memoryMB} MB\`\nUso de CPU: \`${cpuUsage}%\`\n\n**Versões:**\nNode.js: \`${process.version}\`\nDiscord.js: \`v${systemInfo.discordJsVersion}\`\nNPM: \`v${systemInfo.npmVersion}\`\nBot: \`${packageJson.version}\`\nMySQL: \`v${systemInfo.mysqlVersion}\``),
+          )
+        
+        // QUARTO: Seção Hardware/OS
+        components[0]
+          .addSeparatorComponents(
+            new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
+          )
+          .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(`### ${obterEmoji("cpu")} Hardware & Sistema Operacional`),
+          )
+          .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(`**Sistema Operacional:**\nOS: \`${osInfo.platform} ${osInfo.release}\`\nArquitetura: \`${osInfo.arch}\`\nHostname: \`${osInfo.hostname}\`\n\n**Hardware:**\nCPU: \`${cpuModel}\`\nCores/Threads: \`${cpuCores}\`\nRAM Total: \`${systemInfo.totalMemoryGB} GB\`\nRAM Livre: \`${systemInfo.freeMemoryGB} GB\`\nRAM Usada: \`${systemInfo.usedMemoryGB} GB\``),
+          )
+
+        await interaction.reply({
+          components: components,
+          flags: MessageFlags.IsComponentsV2
+        })
+        
+        // Calcular responseTime APÓS a resposta
+        const responseTime = Date.now() - startTime
+        
+        // Prepara dados do usuário para log
+        const usuario = {
+          username: interaction.user.username,
+          displayName: interaction.member?.displayName || interaction.user.username,
+          id: interaction.user.id,
+          tag: interaction.user.tag,
+        }
+        
+        logger.info("✅ Status do bot consultado:", {
+          usuario: {
+            username: usuario.username,
+            displayName: usuario.displayName,
+            id: usuario.id,
+            tag: usuario.tag
+          },
+          comando: "botstatus",
+          responseTime: responseTime,
+          botLatency: botLatency,
+          uptime: uptimeFormatted,
+          memoryUsage: memoryMB,
+          cpuUsage: cpuUsage,
+          dbConnected: database.isConnected,
+          apiRunning: apiServer.isRunning,
+          tunnelActive: !!tunnelStatus.activeUrl,
+          systemInfo: systemInfo,
+          osInfo: osInfo,
+          timestamp: new Date().toISOString(),
+          categoria: 'discord_comando_status',
+          operacao: 'bot_status_consultado'
+        })
+        
+      } catch (error) {
+        logger.error("❌ Erro ao consultar status do bot:", {
+          erro: error.message,
+          stack: error.stack,
+          usuario: {
+            username: interaction.user?.username,
+            displayName: interaction.member?.displayName || interaction.user?.username,
+            id: interaction.user?.id,
+            tag: interaction.user?.tag
+          },
+          timestamp: new Date().toISOString(),
+          categoria: 'discord_comando_status',
+          operacao: 'erro_consultar_status'
+        })
+        
+        // Criar container de erro em Components V2
+        const containerErro = new ContainerBuilder()
+          .setAccentColor(16711680) // Vermelho para erro
+          .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(`### ${obterEmoji("errado")} Erro interno`),
+          )
+          .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent("Ocorreu um erro interno ao consultar status do bot. Tente novamente."),
+          )
+        
+        if (interaction.replied) {
+          await interaction.editReply({
+            components: [containerErro],
+            flags: MessageFlags.IsComponentsV2
+          })
+        } else {
+          await interaction.reply({
+            components: [containerErro],
+            flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral
+          })
+        }
       }
     }
 

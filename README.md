@@ -29,6 +29,7 @@ text
 - **Comando `/modelos`**: Acessa modelos de documentos e templates com branding da 4.events (uso interno)
 - **Comando `/capa-linkedin`**: Acessa a capa oficial da 4.events para LinkedIn dos colaboradores
 - **Comando `/fundo-escritorio`**: Acessa o papel de parede oficial da 4.events para área de trabalho
+- **Comando `/botstatus`**: Exibe informações detalhadas de status, performance e saúde do bot com métricas completas
 - **Comando `/ping`**: Verifica conectividade e status do bot
 - **Comando `/help`**: Exibe ajuda completa dos comandos
 - **Validação inteligente de datas**: Aceita múltiplos formatos (DD/MM/AAAA, D/M/AA, etc.)
@@ -69,6 +70,9 @@ text
 ### Acessando Fundo de Escritório para Webcam
 `/fundo-escritorio`
 
+### Verificando Status Detalhado do Bot
+`/botstatus`
+
 ### Verificando Status do Bot
 `/ping`
 
@@ -88,6 +92,7 @@ text
 | `/modelos` | Acessa modelos de documentos | Nenhum |
 | `/capa-linkedin` | Acessa capa para LinkedIn | Nenhum |
 | `/fundo-escritorio` | Acessa fundo para webcam | Nenhum |
+| `/botstatus` | Exibe status detalhado do bot | Nenhum |
 | `/ping` | Verifica status do bot | Nenhum |
 | `/help` | Exibe ajuda dos comandos | Nenhum |
 
@@ -131,7 +136,7 @@ O bot implementa um sistema avançado de tunneling para uso do Cloudflare para p
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
 │   DISCORD BOT   │    │   FASTIFY API   │    │   EXTERNAL APIs │
-│                 │    │   (CLOUFLARED)  │    │                 │
+│                 │    │  (CLOUDFLARED)  │    │                 │
 │ • /marketing    │◄──►│ • Rate Limiting │◄──►│ • Microsoft     │
 │ • /parceria     │    │ • CORS & Helmet │    │   Clarity       │
 │ • /leads        │    │ • JSON Schemas  │    │ • N8N Webhooks  │
@@ -182,7 +187,7 @@ O bot implementa um sistema avançado de tunneling para uso do Cloudflare para p
    `npm install`
 
 3. **Configure as variáveis de ambiente (dotenv)**
-   ```
+```
    # Discord
    BOT_TOKEN=seu_token_do_discord
    WEBHOOK=url_webhook
@@ -198,10 +203,27 @@ O bot implementa um sistema avançado de tunneling para uso do Cloudflare para p
    # IDs dos usuários do Discord Administradores do bot
    BOT_ADMIN_DISCORD_USERS_ID=999999999999999,99999999999999999
 
+   # Fastify API
+   API_PORT=3000
+   API_HOST=0.0.0.0
+
+   # Banco de dados MySQL
+   DB_HOST=localhost
+   DB_PORT=3306
+   DB_USER=4events_user
+   DB_PASSWORD=senha_segura_aqui
+   DB_NAME=4events_marketing
+
+   # Cloudflare Tunnel
+   CLOUDFLARE_TUNNEL_TOKEN=eyJ...SEU_TOKEN_COMPLETO_AQUI
+   NODE_ENV=production
+   TUNNEL_ENABLED=true
+   URL_FIXA_DOMINIO=https://SEU_DOMINIO_FIXO_COM_CLOUDFLARE.com.br
+
    # Configurações de Logging (Winston)
    LOG_LEVEL=info
    NODE_ENV=production
-   ```
+```
 
 4. **Inicie o bot**
    `npm start` ou `node src/index.js`
@@ -258,7 +280,7 @@ Este projeto está sob a licença MIT.
 ---
 
 **Status**: ✅ Ativo e funcionando<br>
-**Versão**: 1.0.13<br>
+**Versão**: 1.0.14<br>
 **Última atualização**: Setembro 2025<br>
 
 <p align="center">
