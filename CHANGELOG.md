@@ -9,6 +9,38 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 ### Em Desenvolvimento
 - Funcionalidades futuras serão listadas aqui
 
+## [1.0.15] - 2025-09-09
+
+### ✨ Adicionado
+- **Novo Comando `/capa-whatsapp`**: Nova funcionalidade para geração de capas personalizadas para grupos de WhatsApp de clientes da 4.events com KAM's
+  - **Template Padrão**: Combina logo do cliente com template padronizado da 4.events
+  - **Suporte Múltiplos Formatos**: Aceita arquivos PNG, JPG e JPEG (máximo 10MB)
+  - **Ferramenta para KAMs**: Especialmente desenvolvida para Key Account Managers criarem materiais personalizados
+
+### 🔧 Modificado
+- **Comando `/help`**: Atualizada documentação completa para incluir o novo comando `/capa-whatsapp`
+  - Nova seção "🖼️ Comandos de Imagens" consolidando comandos visuais
+  - Instruções detalhadas de uso do comando de geração de capas
+  - Orientações sobre formatos suportados e melhores práticas
+  - Reorganização da estrutura de ajuda para melhor categorização
+
+### 🎨 Técnico
+- **Dependência Sharp**: Implementação completa de processamento de imagens com Sharp
+- **Template System**: Sistema de templates para capas de WhatsApp com aplicação de logos em círculos
+- **Validação de Arquivos**: Sistema robusto de validação de uploads de imagens
+- **Error Handling**: Tratamento específico de erros para operações de processamento de imagem
+- **Logging Detalhado**: Logs estruturados para operações de geração de capas
+
+### 🚀 Performance
+- **Processamento Otimizado**: Geração eficiente de capas com qualidade JPEG 95%
+- **Gerenciamento de Memória**: Processamento de imagens com limpeza automática de buffers
+- **Validação Prévia**: Verificações de arquivo antes do processamento para economia de recursos
+
+### 📱 UX/UI
+- **Feedback Visual**: Mensagens de progresso durante processamento de imagens
+- **Download Direto**: Arquivo gerado disponibilizado imediatamente via Components V2
+- **Tratamento de Erros**: Mensagens de erro amigáveis para problemas de processamento
+
 ## [1.0.14] - 2025-09-08
 
 ### ✨ Adicionado

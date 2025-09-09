@@ -29,6 +29,7 @@ text
 - **Comando `/modelos`**: Acessa modelos de documentos e templates com branding da 4.events (uso interno)
 - **Comando `/capa-linkedin`**: Acessa a capa oficial da 4.events para LinkedIn dos colaboradores
 - **Comando `/fundo-escritorio`**: Acessa o papel de parede oficial da 4.events para área de trabalho
+- **Comando `/capa-whatsapp`**: Gera capa de WhatsApp personalizada com logo do cliente (ideal para KAMs)
 - **Comando `/botstatus`**: Exibe informações detalhadas de status, performance e saúde do bot com métricas completas
 - **Comando `/ping`**: Verifica conectividade e status do bot
 - **Comando `/help`**: Exibe ajuda completa dos comandos
@@ -70,6 +71,9 @@ text
 ### Acessando Fundo de Escritório para Webcam
 `/fundo-escritorio`
 
+### Gerando Capa Personalizada para WhatsApp
+`/capa-whatsapp logo:[anexar arquivo PNG/JPG]`
+
 ### Verificando Status Detalhado do Bot
 `/botstatus`
 
@@ -92,6 +96,7 @@ text
 | `/modelos` | Acessa modelos de documentos | Nenhum |
 | `/capa-linkedin` | Acessa capa para LinkedIn | Nenhum |
 | `/fundo-escritorio` | Acessa fundo para webcam | Nenhum |
+| `/capa-whatsapp` | Gera capa personalizada para WhatsApp | `logo` (arquivo obrigatório) |
 | `/botstatus` | Exibe status detalhado do bot | Nenhum |
 | `/ping` | Verifica status do bot | Nenhum |
 | `/help` | Exibe ajuda dos comandos | Nenhum |
@@ -280,7 +285,7 @@ Este projeto está sob a licença MIT.
 ---
 
 **Status**: ✅ Ativo e funcionando<br>
-**Versão**: 1.0.14<br>
+**Versão**: 1.0.15<br>
 **Última atualização**: Setembro 2025<br>
 
 <p align="center">

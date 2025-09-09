@@ -25,6 +25,8 @@ import path from "path"
 import { zip } from 'zip-a-folder'
 import dotenv from "dotenv"
 import fetch from "node-fetch"
+import sharp from 'sharp'
+import { fileURLToPath } from 'url'
 import logger, { logCommand, logError, logWebhook, logPerformance } from './logger.js'
 import database from './database.js'
 import apiServer from './api.js'
@@ -36,6 +38,9 @@ const packageJson = require("../package.json")
 const emojis = require("./emojis.json")
 
 dotenv.config()
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 // Configurações de retry
 const RETRY_CONFIG = {
@@ -629,10 +634,10 @@ function criarContainerInicialHelp() {
                   .setLabel("📄 Comando /modelos")
                   .setValue("help_modelos")
                   .setDescription("Como acessar modelos de documentos e templates"),
-                new SelectMenuOptionBuilder()
-                  .setLabel("🖼️ Comandos de Imagens")
-                  .setValue("help_images")
-                  .setDescription("Capa LinkedIn e fundo de escritório"),
+              new SelectMenuOptionBuilder()
+                .setLabel("🖼️ Comandos de Imagens")
+                .setValue("help_images")
+                .setDescription("Capa LinkedIn, fundo de escritório e capa WhatsApp"),
                 new SelectMenuOptionBuilder()
                   .setLabel("🏓 Outros Comandos")
                   .setValue("help_others")
@@ -1090,6 +1095,17 @@ const cmdLeads = new SlashCommandBuilder()
       .setDescription("Filtrar por campanha específica (opcional)")
       .setRequired(false)
       .setMaxLength(255)
+  )
+
+// Adicione junto com os outros comandos slash
+const cmdCapaWhatsapp = new SlashCommandBuilder()
+  .setName("capa-whatsapp")
+  .setDescription("🖼️ Gera capa de WhatsApp personalizada com logo do cliente")
+  .addAttachmentOption(option =>
+    option
+      .setName("logo")
+      .setDescription("Logo do cliente (PNG, JPG ou JPEG)")
+      .setRequired(true)
   )
 
 // Define o comando /help
@@ -2003,6 +2019,66 @@ function formatUptime(uptimeSeconds) {
   return parts.join(' ')
 }
 
+async function processarCapaWhatsapp(logoBuffer, templatePath) {
+  try {
+    // Verificar se o template existe
+    if (!fs.existsSync(templatePath)) {
+      throw new Error(`Template não encontrado: ${templatePath}`)
+    }
+
+    // Dimensões do círculo
+    const CIRCLE_SIZE = 710
+    const CIRCLE_X = 540
+    const CIRCLE_Y = 715
+    
+    // Validar se o logoBuffer é uma imagem válida
+    const logoMetadata = await sharp(logoBuffer).metadata()
+    if (!logoMetadata.width || !logoMetadata.height) {
+      throw new Error('Imagem de logo inválida ou corrompida')
+    }
+
+    // Criar máscara circular como PNG
+    const maskSvg = Buffer.from(`
+      <svg width="${CIRCLE_SIZE}" height="${CIRCLE_SIZE}" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="${CIRCLE_SIZE/2}" cy="${CIRCLE_SIZE/2}" r="${CIRCLE_SIZE/2}" fill="white"/>
+      </svg>
+    `)
+
+    // Converter SVG da máscara para PNG
+    const circularMask = await sharp(maskSvg)
+      .png()
+      .toBuffer()
+
+    // Redimensionar e aplicar máscara circular ao logo
+    const logoProcessado = await sharp(logoBuffer)
+      .resize(CIRCLE_SIZE, CIRCLE_SIZE, {
+        fit: 'contain',
+        background: { r: 0, g: 0, b: 0, alpha: 0 }
+      })
+      .composite([{
+        input: circularMask,
+        blend: 'dest-in'
+      }])
+      .png()
+      .toBuffer()
+
+    // Compor imagem final
+    const imagemFinal = await sharp(templatePath)
+      .composite([{
+        input: logoProcessado,
+        left: CIRCLE_X - CIRCLE_SIZE/2,
+        top: CIRCLE_Y - CIRCLE_SIZE/2
+      }])
+      .jpeg({ quality: 95 })
+      .toBuffer()
+    
+    return imagemFinal
+    
+  } catch (error) {
+    throw new Error(`Erro ao processar imagem: ${error.message}`)
+  }
+}
+
 // Evento: Bot está pronto
 client.once("ready", async () => {
   try {
@@ -2070,6 +2146,7 @@ client.once("ready", async () => {
       cmdPing,
       cmdBotStatus,
       cmdLeads,
+      cmdCapaWhatsapp,
       cmdHelp,
     ])
     
@@ -3055,7 +3132,10 @@ client.on("interactionCreate", async (interaction) => {
                 .addTextDisplayComponents(
                   new TextDisplayBuilder().setContent("**Bot para criação de solicitações de tarefas de marketing, registro de parcerias e análise de performance.**\n\nFuncionalidades principais:\n• Criar tarefas de marketing com formulários\n• Registrar parcerias comerciais\n• Obter dados de performance via Microsoft Clarity\n• Acessar materiais oficiais da 4.events"),
                 )
-                .addSeparatorComponents(
+                .addTextDisplayComponents(
+                  new TextDisplayBuilder().setContent("**Bot para criação de solicitações de tarefas de marketing, registro de parcerias e análise de performance.**\n\nFuncionalidades principais:\n• Criar tarefas de marketing com formulários\n• Registrar parcerias comerciais\n• Obter dados de performance via Microsoft Clarity\n• Acessar materiais oficiais da 4.events\n• Gerar capas personalizadas para WhatsApp"),
+                )
+                  .addSeparatorComponents(
                   new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
                 )
                 .addTextDisplayComponents(
@@ -3372,39 +3452,51 @@ client.on("interactionCreate", async (interaction) => {
             ]
             break
 
-          case 'help_images':
-            helpContent = [
-              new ContainerBuilder()
-                .setAccentColor(16731904)
-                .addTextDisplayComponents(
-                  new TextDisplayBuilder().setContent(`### 🖼️ Comandos de Imagens`),
-                )
-                .addSeparatorComponents(
-                  new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
-                )
-                .addTextDisplayComponents(
-                  new TextDisplayBuilder().setContent("**🖼️ /capa-linkedin**\n• Acessa a capa oficial da 4.events para LinkedIn\n• Para uso em perfis dos colaboradores\n• Comando: `/capa-linkedin`"),
-                )
-                .addSeparatorComponents(
-                  new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
-                )
-                .addTextDisplayComponents(
-                  new TextDisplayBuilder().setContent("**🖥️ /fundo-escritorio**\n• Acessa o papel de parede oficial da 4.events\n• Para área de trabalho e webcam em reuniões\n• Ideal para home office\n• Comando: `/fundo-escritorio`"),
-                )
-                .addSeparatorComponents(
-                  new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
-                )
-                .addActionRowComponents(
-                  new ActionRowBuilder()
-                    .addComponents(
-                      new ButtonBuilder()
-                        .setCustomId('help_voltar')
-                        .setLabel('Voltar ao menu principal')
-                        .setStyle(ButtonStyle.Secondary)
-                    ),
-                )
-            ]
-            break
+            case 'help_images':
+              helpContent = [
+                new ContainerBuilder()
+                  .setAccentColor(16731904)
+                  .addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent(`### 🖼️ Comandos de Imagens`),
+                  )
+                  .addSeparatorComponents(
+                    new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
+                  )
+                  .addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent("**🖼️ /capa-linkedin**\n• Acessa a capa oficial da 4.events para LinkedIn\n• Para uso em perfis dos colaboradores\n• Comando: `/capa-linkedin`"),
+                  )
+                  .addSeparatorComponents(
+                    new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
+                  )
+                  .addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent("**🖥️ /fundo-escritorio**\n• Acessa o papel de parede oficial da 4.events\n• Para área de trabalho e webcam em reuniões\n• Ideal para home office\n• Comando: `/fundo-escritorio`"),
+                  )
+                  .addSeparatorComponents(
+                    new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
+                  )
+                  .addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent("**📱 /capa-whatsapp**\n• Gera capa personalizada para grupos de WhatsApp\n• Adiciona o logo do cliente à capa padrão da 4.events\n• Ideal para KAMs (Key Account Managers)\n• Formato suportado: PNG, JPG, JPEG (máx. 10MB)\n• Comando: `/capa-whatsapp logo:[arquivo]`"),
+                  )
+                  .addSeparatorComponents(
+                    new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
+                  )
+                  .addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent(`${obterEmoji("warn")} **Instruções para /capa-whatsapp:**\n• Anexe o logo do cliente ao comando\n• O logo será inserido em um círculo na capa\n• Mantenha proporções adequadas para melhor resultado\n• Ideal para grupos de WhatsApp com clientes`),
+                  )
+                  .addSeparatorComponents(
+                    new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true),
+                  )
+                  .addActionRowComponents(
+                    new ActionRowBuilder()
+                      .addComponents(
+                        new ButtonBuilder()
+                          .setCustomId('help_voltar')
+                          .setLabel('Voltar ao menu principal')
+                          .setStyle(ButtonStyle.Secondary)
+                      ),
+                  )
+              ]
+              break
 
           case 'help_others':
             helpContent = [
@@ -4039,6 +4131,116 @@ client.on("interactionCreate", async (interaction) => {
           categoria: 'discord_clarity_consulta',
           operacao: 'erro_consultar_clarity_api'
         })
+      }
+    }
+
+    // Comando /capa-whatsapp
+    else if (interaction.commandName === "capa-whatsapp") {
+      const logoAttachment = interaction.options.getAttachment("logo");
+      
+      // Validações
+      if (!logoAttachment) {
+        await interaction.reply({
+          content: `${obterEmoji("errado")} Você precisa enviar um logo!`,
+          flags: MessageFlags.Ephemeral
+        });
+        return;
+      }
+      
+      // Validar tipo de arquivo
+      const tiposPermitidos = ['image/png', 'image/jpeg', 'image/jpg'];
+      if (!tiposPermitidos.includes(logoAttachment.contentType)) {
+        await interaction.reply({
+          content: `${obterEmoji("errado")} Apenas arquivos PNG, JPG ou JPEG são aceitos!`,
+          flags: MessageFlags.Ephemeral
+        });
+        return;
+      }
+      
+      // Validar tamanho (máx 10MB)
+      if (logoAttachment.size > 10 * 1024 * 1024) {
+        await interaction.reply({
+          content: `${obterEmoji("errado")} Logo muito grande! Máximo 10MB.`,
+          flags: MessageFlags.Ephemeral
+        });
+        return;
+      }
+      
+      const loadingEmoji = obterEmoji("loading");
+      await interaction.reply(`${loadingEmoji} Processando capa personalizada...`);
+      
+      try {
+        // Baixar logo
+        const response = await fetch(logoAttachment.url);
+        const logoBuffer = Buffer.from(await response.arrayBuffer());
+        
+        // Processar imagem
+        const templatePath = './assets/capa-whatsapp-template.png';
+        const imagemFinal = await processarCapaWhatsapp(logoBuffer, templatePath);
+        
+        // Criar attachment da resposta
+        const nomeArquivo = `capa-whatsapp-${Date.now()}.jpg`;
+        const attachment = new AttachmentBuilder(imagemFinal, { name: nomeArquivo });
+        
+        // Container de sucesso
+        const container = new ContainerBuilder()
+          .setAccentColor(16731904) // Cor da 4.events
+          .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(`### ${obterEmoji("certo")} Capa de WhatsApp criada!`),
+          )
+          .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent("✨ **Sua capa personalizada está pronta!**\n\n📱 Use esta imagem como foto do grupo no WhatsApp\n💡 **Dica:** Salve a imagem e configure no seu grupo"),
+          )
+          .addFileComponents(
+            new FileBuilder().setURL(`attachment://${nomeArquivo}`)
+          );
+        
+        await interaction.editReply({
+          content: "",
+          components: [container],
+          files: [attachment],
+          flags: MessageFlags.IsComponentsV2
+        });
+        
+        // Log da operação
+        logger.info("✅ Capa WhatsApp gerada com sucesso:", {
+          usuario: {
+            username: interaction.user.username,
+            id: interaction.user.id
+          },
+          logoOriginal: {
+            nome: logoAttachment.name,
+            tamanho: logoAttachment.size,
+            tipo: logoAttachment.contentType
+          },
+          arquivoGerado: nomeArquivo,
+          categoria: 'discord_capa_whatsapp',
+          operacao: 'capa_gerada_sucesso'
+        });
+        
+      } catch (error) {
+        logger.error("❌ Erro ao gerar capa WhatsApp:", {
+          erro: error.message,
+          stack: error.stack,
+          usuario: interaction.user.username,
+          categoria: 'discord_capa_whatsapp', 
+          operacao: 'erro_gerar_capa'
+        });
+        
+        const containerErro = new ContainerBuilder()
+          .setAccentColor(16711680) // Vermelho
+          .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(`### ${obterEmoji("errado")} Erro ao processar`),
+          )
+          .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent("Não foi possível processar sua imagem. Verifique se o arquivo está correto e tente novamente."),
+          );
+        
+        await interaction.editReply({
+          content: "",
+          components: [containerErro],
+          flags: MessageFlags.IsComponentsV2
+        });
       }
     }
 
