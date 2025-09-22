@@ -9,6 +9,16 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 ### Em Desenvolvimento
 - Funcionalidades futuras serão listadas aqui
 
+## [1.0.16] - 2025-09-21
+
+### Modificado
+- **Template de Capa WhatsApp**: Atualizado arquivo `capa-whatsapp-template.png` com fundo branco em vez de fundo preto
+  - Melhora a visibilidade para a maioria dos logos em formato PNG que tenham fundo transparente
+
+### Técnico
+- **Assets**: Substituição do arquivo de template na pasta `assets/capa-whatsapp-template.png`
+- **Comando /capa-whatsapp**: Funcionalidade inalterada, apenas melhoria no arquivo PNG template visual
+
 ## [1.0.15] - 2025-09-09
 
 ### ✨ Adicionado
